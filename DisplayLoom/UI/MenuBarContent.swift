@@ -241,13 +241,7 @@ struct MenuBarContent: View {
 
   private func updateLaunchAtLogin(_ enabled: Bool) {
     store.setLaunchAtLoginEnabled(enabled)
-    if store.shouldShowLaunchAtLoginApproval {
-      DialogPresenter.showLaunchAtLoginApproval {
-        store.openLoginItemSettings()
-      }
-      store.clearLaunchAtLoginApprovalNotice()
-    }
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   private func presentPendingMessages() {

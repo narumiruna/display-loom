@@ -76,6 +76,12 @@ enum DisplayMirroringError: LocalizedError, Equatable, Sendable {
 
 @MainActor
 final class DisplayMirroringManager: DisplayMirroringManaging {
+  private struct SourceCandidate {
+    let id: UUID
+    let name: String
+    let displayID: CGDirectDisplayID
+  }
+
   func availableSources(excluding displayIDs: Set<CGDirectDisplayID>) throws
     -> [DisplayMirrorSource]
   {
@@ -84,21 +90,22 @@ final class DisplayMirroringManager: DisplayMirroringManaging {
         !displayIDs.contains($0)
           && CGDisplayVendorNumber($0) != StableDisplayIdentity.virtualDisplayVendorID
       }
-      .compactMap { displayID -> (UUID, String, CGDirectDisplayID)? in
+      .compactMap { displayID -> SourceCandidate? in
         guard let uuid = DisplayUUID.uuid(for: displayID) else { return nil }
-        return (uuid, displayName(for: displayID), displayID)
+        return SourceCandidate(id: uuid, name: displayName(for: displayID), displayID: displayID)
       }
       .sorted { lhs, rhs in
-        if lhs.1 == rhs.1 { return lhs.2 < rhs.2 }
-        return lhs.1.localizedStandardCompare(rhs.1) == .orderedAscending
+        if lhs.name == rhs.name { return lhs.displayID < rhs.displayID }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
       }
 
-    let nameCounts = Dictionary(grouping: candidates, by: { $0.1 }).mapValues(\.count)
+    let nameCounts = Dictionary(grouping: candidates, by: \.name).mapValues(\.count)
     var nameIndexes: [String: Int] = [:]
 
-    return candidates.map { uuid, name, _ in
+    return candidates.map { candidate in
+      let name = candidate.name
       guard nameCounts[name, default: 0] > 1 else {
-        return DisplayMirrorSource(id: uuid, name: name)
+        return DisplayMirrorSource(id: candidate.id, name: name)
       }
       let index = nameIndexes[name, default: 0] + 1
       nameIndexes[name] = index
@@ -107,7 +114,7 @@ final class DisplayMirroringManager: DisplayMirroringManaging {
         name,
         index
       )
-      return DisplayMirrorSource(id: uuid, name: numberedName)
+      return DisplayMirrorSource(id: candidate.id, name: numberedName)
     }
   }
 

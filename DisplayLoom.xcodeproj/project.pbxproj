@@ -26,11 +26,13 @@
 		A8796038CC51DC863E3CBC41 /* PersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA9DD8B8929B6EDF29625D0 /* PersistenceTests.swift */; };
 		AB9FAAED8E161C4AECBBF220 /* MenuBarContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA2F342E45E606EAD74DD46 /* MenuBarContent.swift */; };
 		AD2BA2D0205C41A4715C766A /* StateRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6291E17D85E9FC0AA7D4D1 /* StateRepository.swift */; };
+		B93B0230331AE1FEFC9AF98B /* VirtualDisplayStoreLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE9E8D03B04ADEFFCFA1393 /* VirtualDisplayStoreLoginTests.swift */; };
 		D215D2D0A29677BAC65E6490 /* VirtualDisplayStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D85D7EE66F5E34DA578CED8 /* VirtualDisplayStoreTests.swift */; };
 		DC3841A14C8F246CF761CCD5 /* DisplayLoomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA671942716BF1D06E8FBF4D /* DisplayLoomApp.swift */; };
 		DD55A4CF935411F6315DE184 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E67705D6FB65B04B552FAD3 /* AppKit.framework */; };
 		E17E25728A25B03BA313B2AD /* PersistedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724875EA94B73532FDE20FD /* PersistedState.swift */; };
 		EA36056EC0BB67F318F7ED63 /* TestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979328D9BA4A38EE7A3B800F /* TestDoubles.swift */; };
+		F0B5B2D2774B6124DC8162B7 /* VirtualDisplayStoreMirroringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF023B4AA06DBDD9E95EEDC /* VirtualDisplayStoreMirroringTests.swift */; };
 		F1711C95DBDF95130713240F /* VirtualDisplayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E36756C2028A05BCF66E9CAE /* VirtualDisplayStore.swift */; };
 		F2FE537F63BE851F97A08FEC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C6D33218D187D8D0C0D490C8 /* Assets.xcassets */; };
 		FD8E37B8E92894BEECE81B66 /* VirtualDisplayBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E8499D2842E8624980158C3 /* VirtualDisplayBackend.swift */; };
@@ -64,6 +66,7 @@
 		6529809543E34CB72FEDAA5B /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		65A349DE2884E7E01F61B191 /* LiveVirtualDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveVirtualDisplayTests.swift; sourceTree = "<group>"; };
 		6843939B2030B34CC264558F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		7DE9E8D03B04ADEFFCFA1393 /* VirtualDisplayStoreLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayStoreLoginTests.swift; sourceTree = "<group>"; };
 		8468D5DA0EFCAEB21B2C2EA3 /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		979328D9BA4A38EE7A3B800F /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
 		9D85D7EE66F5E34DA578CED8 /* VirtualDisplayStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayStoreTests.swift; sourceTree = "<group>"; };
@@ -74,6 +77,7 @@
 		B78E6E4A60EB357911C9D43C /* StableDisplayIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableDisplayIdentity.swift; sourceTree = "<group>"; };
 		B94287CA53A8E8A63416FD55 /* DisplayMirroringManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayMirroringManagerTests.swift; sourceTree = "<group>"; };
 		BA671942716BF1D06E8FBF4D /* DisplayLoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayLoomApp.swift; sourceTree = "<group>"; };
+		BBF023B4AA06DBDD9E95EEDC /* VirtualDisplayStoreMirroringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayStoreMirroringTests.swift; sourceTree = "<group>"; };
 		BF12D86B9444D63B9ACDE2AC /* VSCGVirtualDisplayBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VSCGVirtualDisplayBridge.m; sourceTree = "<group>"; };
 		BF306AEE45D19B9D635E8C06 /* ResolutionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolutionPreset.swift; sourceTree = "<group>"; };
 		C545E878852767D7EB272E9F /* VSCGVirtualDisplayBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VSCGVirtualDisplayBridge.h; sourceTree = "<group>"; };
@@ -161,6 +165,8 @@
 				AEA9DD8B8929B6EDF29625D0 /* PersistenceTests.swift */,
 				D48450D05E16A5262C35BB8A /* ResolutionPresetTests.swift */,
 				979328D9BA4A38EE7A3B800F /* TestDoubles.swift */,
+				7DE9E8D03B04ADEFFCFA1393 /* VirtualDisplayStoreLoginTests.swift */,
+				BBF023B4AA06DBDD9E95EEDC /* VirtualDisplayStoreMirroringTests.swift */,
 				9D85D7EE66F5E34DA578CED8 /* VirtualDisplayStoreTests.swift */,
 			);
 			path = DisplayLoomTests;
@@ -360,6 +366,8 @@
 				A8796038CC51DC863E3CBC41 /* PersistenceTests.swift in Sources */,
 				34F474931A4EDCB4EB75CDA7 /* ResolutionPresetTests.swift in Sources */,
 				EA36056EC0BB67F318F7ED63 /* TestDoubles.swift in Sources */,
+				B93B0230331AE1FEFC9AF98B /* VirtualDisplayStoreLoginTests.swift in Sources */,
+				F0B5B2D2774B6124DC8162B7 /* VirtualDisplayStoreMirroringTests.swift in Sources */,
 				D215D2D0A29677BAC65E6490 /* VirtualDisplayStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
