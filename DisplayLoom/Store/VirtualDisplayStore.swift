@@ -199,12 +199,7 @@ final class VirtualDisplayStore: ObservableObject {
   func disconnectProfile(id: UUID) {
     guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
     profiles[index].desiredConnected = false
-    connectionTokens[id] = nil
-    clearActualMirror(profileID: id)
-    let connection = connections.removeValue(forKey: id)
-    connection?.invalidate()
-    activeMirrorSourceIDs[id] = nil
-    mirrorRestoreFailures.remove(id)
+    invalidateConnection(for: id)
     connectionStates[id] = .disconnected
     save()
     logger.info("Disconnected virtual display \(id.uuidString, privacy: .public)")
@@ -215,9 +210,9 @@ final class VirtualDisplayStore: ObservableObject {
     guard profiles[index].resolutionID != resolution.id else { return }
 
     if let connection = connections[profileID],
-      mirroringManager.mirrorSourceID(for: connection.displayID) != nil
+      let sourceID = mirroringManager.mirrorSourceID(for: connection.displayID)
     {
-      activeMirrorSourceIDs[profileID] = mirroringManager.mirrorSourceID(for: connection.displayID)
+      activeMirrorSourceIDs[profileID] = sourceID
       reportError(
         String(
           localized: "error.resolutionMirrored",
@@ -262,22 +257,14 @@ final class VirtualDisplayStore: ObservableObject {
     save()
 
     if shouldReconnect {
-      connectionTokens[id] = nil
-      clearActualMirror(profileID: id)
-      connections.removeValue(forKey: id)?.invalidate()
-      activeMirrorSourceIDs[id] = nil
-      mirrorRestoreFailures.remove(id)
+      invalidateConnection(for: id)
       connectionStates[id] = .disconnected
       await connectProfile(id: id, updateDesiredState: false)
     }
   }
 
   func removeProfile(id: UUID) {
-    connectionTokens[id] = nil
-    clearActualMirror(profileID: id)
-    connections.removeValue(forKey: id)?.invalidate()
-    activeMirrorSourceIDs[id] = nil
-    mirrorRestoreFailures.remove(id)
+    invalidateConnection(for: id)
     connectionStates[id] = nil
     profiles.removeAll { $0.id == id }
     save()
@@ -354,6 +341,14 @@ final class VirtualDisplayStore: ObservableObject {
     return lastErrorMessage
   }
 
+  private func invalidateConnection(for profileID: UUID) {
+    connectionTokens[profileID] = nil
+    clearActualMirror(profileID: profileID)
+    connections.removeValue(forKey: profileID)?.invalidate()
+    activeMirrorSourceIDs[profileID] = nil
+    mirrorRestoreFailures.remove(profileID)
+  }
+
   private func connectProfile(id: UUID, updateDesiredState: Bool) async {
     guard backendAvailability.isAvailable else {
       reportError(backendUnavailableMessage())
@@ -402,8 +397,7 @@ final class VirtualDisplayStore: ObservableObject {
 
       connections[id] = connection
       connectionStates[id] = .connected(displayID: connection.displayID)
-      refreshMirrorSources()
-      restoreDesiredMirrors()
+      handleDisplayReconfiguration()
       logger.info("Virtual display \(id.uuidString, privacy: .public) is connected")
     } catch {
       guard connectionTokens[id] == token else { return }
@@ -438,32 +432,7 @@ final class VirtualDisplayStore: ObservableObject {
 
     persistedState.hasAttemptedLoginItemRegistration = true
     save()
-
-    launchAtLoginStatus = launchAtLoginManager.status
-    if launchAtLoginStatus == .enabled {
-      return
-    }
-    if launchAtLoginStatus == .requiresApproval {
-      shouldShowLaunchAtLoginApproval = true
-      return
-    }
-
-    do {
-      try launchAtLoginManager.register()
-      launchAtLoginStatus = launchAtLoginManager.status
-      if launchAtLoginStatus == .requiresApproval {
-        shouldShowLaunchAtLoginApproval = true
-      }
-    } catch {
-      launchAtLoginStatus = launchAtLoginManager.status
-      reportError(
-        String(
-          format: String(
-            localized: "error.loginItem", defaultValue: "Could not update Launch at Login: %@"),
-          error.localizedDescription
-        )
-      )
-    }
+    setLaunchAtLoginEnabled(true)
   }
 
   private func installWakeObserver() {

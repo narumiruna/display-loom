@@ -23,6 +23,7 @@ final class FakeLaunchAtLoginManager: LaunchAtLoginManaging {
   var status: LaunchAtLoginStatus = .disabled
   var registerError: Error?
   var unregisterError: Error?
+  var statusAfterRegistration: LaunchAtLoginStatus = .enabled
   private(set) var registerCallCount = 0
   private(set) var unregisterCallCount = 0
   private(set) var openSettingsCallCount = 0
@@ -30,7 +31,7 @@ final class FakeLaunchAtLoginManager: LaunchAtLoginManaging {
   func register() throws {
     registerCallCount += 1
     if let registerError { throw registerError }
-    if status != .requiresApproval { status = .enabled }
+    if status != .requiresApproval { status = statusAfterRegistration }
   }
 
   func unregister() throws {
@@ -144,5 +145,25 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
 
   func terminate(profileID: UUID) {
     terminationHandlers[profileID]?()
+  }
+}
+
+@MainActor
+struct VirtualDisplayTestEnvironment {
+  let backend = FakeVirtualDisplayBackend()
+  let loginManager = FakeLaunchAtLoginManager()
+  let mirroringManager = FakeDisplayMirroringManager()
+  let repository: MemoryStateRepository
+  let store: VirtualDisplayStore
+
+  init(state: PersistedState = PersistedState()) {
+    repository = MemoryStateRepository(state: state)
+    store = VirtualDisplayStore(
+      backend: backend,
+      repository: repository,
+      launchAtLoginManager: loginManager,
+      mirroringManager: mirroringManager,
+      wakeRetryDelayNanoseconds: 0
+    )
   }
 }
