@@ -40,7 +40,8 @@ final class VirtualDisplayStore: ObservableObject {
   private let wakeRetryDelayNanoseconds: UInt64
   private let logger = Logger(subsystem: "dev.narumi.DisplayLoom", category: "Store")
 
-  private var persistedState: PersistedState
+  private var hasAcknowledged8KWarning: Bool
+  private var hasAttemptedLoginItemRegistration: Bool
   private var connections: [UUID: any VirtualDisplayConnection] = [:]
   private var connectionTokens: [UUID: UUID] = [:]
   private var workspaceWakeObserver: NSObjectProtocol?
@@ -64,7 +65,8 @@ final class VirtualDisplayStore: ObservableObject {
     self.wakeRetryDelayNanoseconds = wakeRetryDelayNanoseconds
 
     let state = repository.load()
-    persistedState = state
+    hasAcknowledged8KWarning = state.hasAcknowledged8KWarning
+    hasAttemptedLoginItemRegistration = state.hasAttemptedLoginItemRegistration
     profiles = state.profiles
     connectionStates = Dictionary(
       uniqueKeysWithValues: state.profiles.map { ($0.id, .disconnected) })
@@ -167,11 +169,11 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   func needs8KWarning(for resolution: ResolutionPreset) -> Bool {
-    resolution.is8K && !persistedState.hasAcknowledged8KWarning
+    resolution.is8K && !hasAcknowledged8KWarning
   }
 
   func acknowledge8KWarning() {
-    persistedState.hasAcknowledged8KWarning = true
+    hasAcknowledged8KWarning = true
     save()
   }
 
@@ -229,7 +231,7 @@ final class VirtualDisplayStore: ObservableObject {
         connectionStates[profileID] = .connected(displayID: connection.displayID)
         save()
       } catch {
-        reportError(VirtualDisplayBackendError.from(error).localizedDescription)
+        reportError(error.localizedDescription)
       }
       return
     }
@@ -402,9 +404,8 @@ final class VirtualDisplayStore: ObservableObject {
     } catch {
       guard connectionTokens[id] == token else { return }
       connections[id] = nil
-      let mappedError = VirtualDisplayBackendError.from(error)
-      connectionStates[id] = .failed(message: mappedError.localizedDescription)
-      reportError(mappedError.localizedDescription)
+      connectionStates[id] = .failed(message: error.localizedDescription)
+      reportError(error.localizedDescription)
     }
   }
 
@@ -425,12 +426,12 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   private func configureDefaultLaunchAtLoginIfNeeded() {
-    guard !persistedState.hasAttemptedLoginItemRegistration else {
+    guard !hasAttemptedLoginItemRegistration else {
       launchAtLoginStatus = launchAtLoginManager.status
       return
     }
 
-    persistedState.hasAttemptedLoginItemRegistration = true
+    hasAttemptedLoginItemRegistration = true
     save()
     setLaunchAtLoginEnabled(true)
   }
@@ -577,8 +578,12 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   private func save() {
-    persistedState.version = PersistedState.currentVersion
-    persistedState.profiles = profiles
-    repository.save(persistedState)
+    repository.save(
+      PersistedState(
+        profiles: profiles,
+        hasAcknowledged8KWarning: hasAcknowledged8KWarning,
+        hasAttemptedLoginItemRegistration: hasAttemptedLoginItemRegistration
+      )
+    )
   }
 }

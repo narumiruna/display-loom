@@ -70,9 +70,11 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
   var sources: [DisplayMirrorSource] = []
   var availableSourcesError: Error?
   var setMirrorError: Error?
+  var onMirrorAttempt: (() -> Void)?
   var onMirrorChange: (() -> Void)?
 
   private(set) var excludedDisplayIDSets: [Set<CGDirectDisplayID>] = []
+  private(set) var mirrorAttempts: [MirrorRequest] = []
   private(set) var mirrorRequests: [MirrorRequest] = []
   private(set) var actualSourceIDs: [CGDirectDisplayID: UUID] = [:]
 
@@ -89,6 +91,8 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
   }
 
   func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) throws {
+    mirrorAttempts.append(MirrorRequest(targetDisplayID: targetDisplayID, sourceID: sourceID))
+    onMirrorAttempt?()
     if let setMirrorError { throw setMirrorError }
     guard actualSourceIDs[targetDisplayID] != sourceID else { return }
 
@@ -112,8 +116,8 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
 
 final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   var availability: VirtualDisplayBackendAvailability = .available
-  var connectError: Error?
-  var setResolutionError: Error?
+  var connectError: VirtualDisplayBackendError?
+  var setResolutionError: VirtualDisplayBackendError?
 
   private(set) var connectRequests: [(VirtualDisplayProfile, ResolutionPreset)] = []
   private(set) var resolutionRequests: [(String, CGDirectDisplayID)] = []

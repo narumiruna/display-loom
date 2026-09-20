@@ -11,7 +11,6 @@
 "menu.addDisplayWithResolution" = "Add with Resolution…";
 "menu.connect" = "Connect";
 "menu.disconnect" = "Disconnect";
-"menu.resolution" = "Resolution";
 "menu.resolutionCurrent" = "Resolution: %@";
 "menu.resolutionControlledByMirror" = "Resolution: Controlled by Mirror Source";
 "menu.mirrorDisplay" = "Mirror Display";
@@ -24,9 +23,7 @@
 "menu.about" = "About Display Loom";
 "menu.quit" = "Quit Display Loom";
 
-"status.disconnected" = "Disconnected";
 "status.connecting" = "Connecting…";
-"status.connected" = "Connected (Display ID %u)";
 "status.failed" = "Disconnected: %@";
 
 "dialog.8k.title" = "Use an 8K virtual display?";

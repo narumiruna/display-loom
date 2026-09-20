@@ -17,6 +17,7 @@ protocol VirtualDisplayConnection: AnyObject {
   func invalidate()
 }
 
+/// Operations throw normalized `VirtualDisplayBackendError` values for presentation by callers.
 protocol VirtualDisplayBackend: AnyObject {
   var availability: VirtualDisplayBackendAvailability { get }
 
@@ -84,28 +85,6 @@ enum VirtualDisplayBackendError: LocalizedError, Equatable {
           localized: "error.unexpected", defaultValue: "An unexpected error occurred: %@"),
         detail
       )
-    }
-  }
-
-  static func from(_ error: Error) -> VirtualDisplayBackendError {
-    if let backendError = error as? VirtualDisplayBackendError {
-      return backendError
-    }
-    let nsError = error as NSError
-    guard nsError.domain == VSCGVirtualDisplayErrorDomain else {
-      return .unexpected(nsError.localizedDescription)
-    }
-
-    switch nsError.code {
-    case 1: return .apiUnavailable
-    case 2: return .invalidConfiguration
-    case 3: return .creationFailed
-    case 4: return .settingsRejected
-    case 5: return .registrationTimedOut
-    case 6: return .modeUnavailable
-    case 7: return .modeSwitchFailed
-    case 8: return .invalidated
-    default: return .unexpected(nsError.localizedDescription)
     }
   }
 }

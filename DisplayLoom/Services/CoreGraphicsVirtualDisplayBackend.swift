@@ -46,6 +46,24 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     )
   }
 
+  static func mapError(_ error: Error) -> VirtualDisplayBackendError {
+    guard let bridgeError = error as? VSCGVirtualDisplayError else {
+      return error as? VirtualDisplayBackendError ?? .unexpected(error.localizedDescription)
+    }
+
+    switch bridgeError.code {
+    case .apiUnavailable: return .apiUnavailable
+    case .invalidConfiguration: return .invalidConfiguration
+    case .creationFailed: return .creationFailed
+    case .settingsRejected: return .settingsRejected
+    case .registrationTimedOut: return .registrationTimedOut
+    case .modeUnavailable: return .modeUnavailable
+    case .modeSwitchFailed: return .modeSwitchFailed
+    case .invalidated: return .invalidated
+    default: return .unexpected(error.localizedDescription)
+    }
+  }
+
   func connect(
     profile: VirtualDisplayProfile,
     resolution: ResolutionPreset,
@@ -83,7 +101,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
           )
           continuation.resume(returning: CoreGraphicsVirtualDisplayConnection(handle: handle))
         } catch {
-          let mappedError = VirtualDisplayBackendError.from(error)
+          let mappedError = Self.mapError(error)
           logger.error(
             "Could not connect virtual display: \(mappedError.localizedDescription, privacy: .public)"
           )
@@ -108,7 +126,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
           logger.info("Set display \(connection.displayID) to \(resolution.id, privacy: .public)")
           continuation.resume()
         } catch {
-          let mappedError = VirtualDisplayBackendError.from(error)
+          let mappedError = Self.mapError(error)
           logger.error(
             "Could not switch display mode: \(mappedError.localizedDescription, privacy: .public)")
           continuation.resume(throwing: mappedError)
