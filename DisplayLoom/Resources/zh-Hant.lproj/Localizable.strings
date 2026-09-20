@@ -11,7 +11,6 @@
 "menu.addDisplayWithResolution" = "以指定解析度新增…";
 "menu.connect" = "連線";
 "menu.disconnect" = "中斷連線";
-"menu.resolution" = "解析度";
 "menu.resolutionCurrent" = "解析度：%@";
 "menu.resolutionControlledByMirror" = "解析度：由同步來源控制";
 "menu.mirrorDisplay" = "同步顯示";
@@ -24,9 +23,7 @@
 "menu.about" = "關於 Display Loom";
 "menu.quit" = "結束 Display Loom";
 
-"status.disconnected" = "未連線";
 "status.connecting" = "連線中…";
-"status.connected" = "已連線（顯示器 ID %u）";
 "status.failed" = "未連線：%@";
 
 "dialog.8k.title" = "使用 8K 虛擬螢幕？";

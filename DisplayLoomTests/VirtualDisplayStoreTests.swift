@@ -79,7 +79,10 @@ final class VirtualDisplayStoreTests: XCTestCase {
 
     XCTAssertEqual(environment.store.profile(id: profileID)?.resolutionID, "1920x1080")
     XCTAssertTrue(environment.store.state(for: profileID).isConnected)
-    XCTAssertNotNil(environment.store.takeLastErrorMessage())
+    XCTAssertEqual(
+      environment.store.takeLastErrorMessage(),
+      VirtualDisplayBackendError.modeSwitchFailed.localizedDescription
+    )
   }
 
   func testDisconnectedResolutionChangeIsSavedWithoutBackendCall() async {
@@ -161,10 +164,37 @@ final class VirtualDisplayStoreTests: XCTestCase {
 
     let profile = environment.store.profiles[0]
     XCTAssertTrue(profile.desiredConnected)
-    guard case .failed = environment.store.state(for: profile.id) else {
-      return XCTFail("Expected failed state")
-    }
-    XCTAssertNotNil(environment.store.takeLastErrorMessage())
+    let expectedMessage = VirtualDisplayBackendError.creationFailed.localizedDescription
+    XCTAssertEqual(environment.store.state(for: profile.id), .failed(message: expectedMessage))
+    XCTAssertEqual(environment.store.takeLastErrorMessage(), expectedMessage)
+  }
+
+  func testUnexpectedBackendErrorsArePresentedWithoutDoubleWrapping() async {
+    let environment = VirtualDisplayTestEnvironment()
+    let connectionError = VirtualDisplayBackendError.unexpected("Connection detail")
+    environment.backend.connectError = connectionError
+    await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
+    let profile = environment.store.profiles[0]
+
+    XCTAssertEqual(environment.store.takeLastErrorMessage(), connectionError.localizedDescription)
+    XCTAssertEqual(
+      environment.store.state(for: profile.id),
+      .failed(message: connectionError.localizedDescription))
+    XCTAssertTrue(environment.repository.state.profiles[0].desiredConnected)
+
+    environment.backend.connectError = nil
+    await environment.store.connectProfile(id: profile.id)
+    let resolutionError = VirtualDisplayBackendError.unexpected("Resolution detail")
+    environment.backend.setResolutionError = resolutionError
+    let savedState = environment.repository.state
+
+    await environment.store.setResolution(
+      ResolutionPreset.preset(withID: "2560x1440")!, for: profile.id)
+
+    XCTAssertEqual(environment.store.takeLastErrorMessage(), resolutionError.localizedDescription)
+    XCTAssertEqual(environment.repository.state, savedState)
+    XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, "1920x1080")
+    XCTAssertTrue(environment.store.state(for: profile.id).isConnected)
   }
 
   func test8KWarningAcknowledgementPersists() {
