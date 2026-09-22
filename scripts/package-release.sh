@@ -16,6 +16,7 @@ fail() {
 version="$1"
 team_id="${DEVELOPMENT_TEAM:-A4YQL6FFTK}"
 notary_profile="${NOTARY_PROFILE:-display-loom-notary}"
+notary_keychain="${NOTARY_KEYCHAIN:-}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 release_dir="$root/.release"
 archive_path="$release_dir/DisplayLoom.xcarchive"
@@ -35,7 +36,8 @@ for command in git security xcodebuild xcrun codesign spctl ditto lipo shasum pl
 done
 
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must use MAJOR.MINOR.PATCH format"
-[[ "$(git branch --show-current)" == "main" ]] || fail "release artifacts must be built from main"
+current_branch="$(git branch --show-current)"
+[[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release artifacts must be built from main"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
 
@@ -45,10 +47,15 @@ build_version="$(awk -F'"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' proje
 [[ -n "$build_version" ]] || fail "CURRENT_PROJECT_VERSION is missing from project.yml"
 
 security find-identity -v -p codesigning \
-  | grep -F 'Developer ID Application:' >/dev/null \
-  || fail "Developer ID Application certificate is not installed"
+  | grep -F 'Developer ID Application:' \
+  | grep -F "($team_id)" >/dev/null \
+  || fail "Developer ID Application certificate for team $team_id is not installed"
 
-xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null \
+notary_auth=(--keychain-profile "$notary_profile")
+if [[ -n "$notary_keychain" ]]; then
+  notary_auth+=(--keychain "$notary_keychain")
+fi
+xcrun notarytool history "${notary_auth[@]}" >/dev/null \
   || fail "notary profile '$notary_profile' is unavailable or invalid"
 
 rm -rf "$release_dir"
@@ -61,6 +68,8 @@ xcodebuild \
   -destination 'generic/platform=macOS' \
   -archivePath "$archive_path" \
   DEVELOPMENT_TEAM="$team_id" \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY="Developer ID Application" \
   archive
 
 cat >"$export_options" <<EOF
@@ -72,8 +81,10 @@ cat >"$export_options" <<EOF
   <string>export</string>
   <key>method</key>
   <string>developer-id</string>
+  <key>signingCertificate</key>
+  <string>Developer ID Application</string>
   <key>signingStyle</key>
-  <string>automatic</string>
+  <string>manual</string>
   <key>teamID</key>
   <string>$team_id</string>
 </dict>
@@ -105,7 +116,7 @@ grep -F "TeamIdentifier=$team_id" <<<"$signature_details" >/dev/null \
 
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$submission_path"
 xcrun notarytool submit "$submission_path" \
-  --keychain-profile "$notary_profile" \
+  "${notary_auth[@]}" \
   --wait \
   --output-format json \
   >"$notary_result"

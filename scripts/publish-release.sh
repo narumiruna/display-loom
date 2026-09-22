@@ -15,6 +15,7 @@ fail() {
 
 version="$1"
 tag="v$version"
+tag_mode="${RELEASE_TAG_MODE:-signed}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 release_dir="$root/.release"
 artifact_name="Display-Loom-${version}.zip"
@@ -30,7 +31,10 @@ done
 
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must use MAJOR.MINOR.PATCH format"
 [[ "${CONFIRM_PUBLISH:-}" == "$tag" ]] || fail "set CONFIRM_PUBLISH=$tag to confirm public publication"
-[[ "$(git branch --show-current)" == "main" ]] || fail "release must be published from main"
+[[ "$tag_mode" == "signed" || "$tag_mode" == "annotated" ]] \
+  || fail "RELEASE_TAG_MODE must be signed or annotated"
+current_branch="$(git branch --show-current)"
+[[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release must be published from main"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
 
 project_version="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
@@ -58,7 +62,11 @@ if gh release view "$tag" >/dev/null 2>&1; then
   fail "GitHub Release already exists: $tag"
 fi
 
-git tag -s "$tag" -m "Display Loom $version" "$head_commit"
+if [[ "$tag_mode" == "signed" ]]; then
+  git tag -s "$tag" -m "Display Loom $version" "$head_commit"
+else
+  git tag -a "$tag" -m "Display Loom $version" "$head_commit"
+fi
 git push origin "refs/tags/$tag"
 remote_tag_commit="$(git ls-remote origin "refs/tags/$tag^{}" | awk '{ print $1 }')"
 [[ "$remote_tag_commit" == "$head_commit" ]] || fail "$tag does not point to the expected remote commit"
