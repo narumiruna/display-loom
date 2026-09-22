@@ -7,7 +7,7 @@ Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. D
 
 ## Requirements
 
-- macOS 13.2 or later on an Intel or Apple Silicon Mac.
+- macOS 14.0 or later on an Intel or Apple Silicon Mac.
 - Xcode 15 or later to build from source.
 
 ## Install

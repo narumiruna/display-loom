@@ -33,6 +33,7 @@ playground.xcworkspace
 .derivedData/
 .release/
 DerivedData/
+.env
 .DS_Store
 
 # CocoaPods
