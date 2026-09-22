@@ -51,23 +51,25 @@ head_commit="$(git rev-parse HEAD)"
 if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then
   fail "local tag already exists: $tag"
 fi
-if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-  fail "remote tag already exists: $tag"
-fi
+remote_tag="$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")" \
+  || fail "could not check remote tag: $tag"
+[[ -z "$remote_tag" ]] || fail "remote tag already exists: $tag"
 if gh release view "$tag" >/dev/null 2>&1; then
   fail "GitHub Release already exists: $tag"
 fi
+
+git tag -s "$tag" -m "Display Loom $version" "$head_commit"
+git push origin "refs/tags/$tag"
+remote_tag_commit="$(git ls-remote origin "refs/tags/$tag^{}" | awk '{ print $1 }')"
+[[ "$remote_tag_commit" == "$head_commit" ]] || fail "$tag does not point to the expected remote commit"
 
 gh release create "$tag" \
   "$artifact_path" \
   "$checksum_path" \
   --draft \
-  --target "$head_commit" \
+  --verify-tag \
   --title "Display Loom $version" \
   --notes-file "$notes_path"
-
-git fetch --quiet origin "refs/tags/$tag:refs/tags/$tag"
-[[ "$(git rev-list -n 1 "$tag")" == "$head_commit" ]] || fail "$tag does not point to the expected commit"
 
 asset_count="$(gh release view "$tag" --json assets --jq '.assets | length')"
 [[ "$asset_count" == "2" ]] || fail "draft release has $asset_count assets, expected 2"
