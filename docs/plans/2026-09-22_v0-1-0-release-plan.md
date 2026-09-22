@@ -31,7 +31,7 @@ Publish Display Loom v0.1.0 as a universal macOS app signed with Developer ID, a
 - [x] Run unit tests and an unsigned universal Release build; `just test` passed 56 tests with one opt-in test skipped, and `just build-release` produced version 0.1.0 build 1 for `x86_64 arm64`.
 - [ ] Install a valid Developer ID Application certificate and save notarization credentials under the documented keychain profile; verify both are discoverable without exposing secrets.
 - [ ] Build the v0.1.0 artifact, receive Apple notarization acceptance, staple its ticket, pass `codesign`, `stapler`, and Gatekeeper checks, and verify both architectures and checksum.
-- [ ] Commit and merge the reviewed release preparation into `main`; verify local `main` equals `origin/main` and the working tree is clean.
+- [x] Commit and merge the reviewed release preparation into `main`; signed PR #8 merge commit `692f812` is on synchronized `main` with a clean working tree.
 - [ ] After explicit confirmation, publish `v0.1.0` and its assets; verify the Git tag and public GitHub Release point to the intended commit and downloads.
 
 ## Completion Checklist
