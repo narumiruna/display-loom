@@ -47,7 +47,7 @@ test-live:
       test
 
 # Build a universal Release app without requiring a signing identity.
-release:
+build-release:
     DEVELOPER_DIR="{{developer_dir}}" xcodebuild \
       -project DisplayLoom.xcodeproj \
       -scheme DisplayLoom \
@@ -56,6 +56,14 @@ release:
       CODE_SIGNING_ALLOWED=NO \
       build
 
-# Remove local Xcode build products.
+# Build, sign, notarize, verify, and package a release.
+package-release version:
+    DEVELOPER_DIR="{{developer_dir}}" ./scripts/package-release.sh "{{version}}"
+
+# Publish a packaged release to GitHub after explicit confirmation.
+publish-release version:
+    ./scripts/publish-release.sh "{{version}}"
+
+# Remove local Xcode build products and release artifacts.
 clean:
-    rm -rf "{{derived_data}}"
+    rm -rf "{{derived_data}}" .release
