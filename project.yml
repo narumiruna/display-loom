@@ -48,6 +48,7 @@ targets:
         NSSupportsSuddenTermination: false
     settings:
       base:
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         PRODUCT_BUNDLE_IDENTIFIER: dev.narumi.DisplayLoom
         PRODUCT_NAME: Display Loom
         PRODUCT_MODULE_NAME: DisplayLoom
@@ -63,6 +64,7 @@ targets:
       - target: DisplayLoom
     settings:
       base:
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         PRODUCT_BUNDLE_IDENTIFIER: dev.narumi.DisplayLoomTests
         GENERATE_INFOPLIST_FILE: true
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Display Loom.app/Contents/MacOS/Display Loom
