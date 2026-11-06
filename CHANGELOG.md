@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+### Patch Changes
+
+- Fix virtual display initialization and prevent resolution changes for mirror primaries. Bind release artifacts to their source commit and clean temporary credentials after failed imports.
+
 ## 0.1.0
 
 Display Loom's first public release.
