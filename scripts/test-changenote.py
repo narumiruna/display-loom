@@ -7,9 +7,10 @@ import shlex
 import shutil
 import subprocess
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -174,16 +175,60 @@ esac
             RELEASE_TAG_MODE="annotated",
         )
 
+    def test_release_workflow_routes_pr_preparation_and_publication_separately(self):
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/release.yml").read_text(),
+            Loader=yaml.BaseLoader,
+        )
+        self.assertEqual(set(workflow["on"]), {"push", "workflow_dispatch"})
+        self.assertEqual(workflow["on"]["push"]["branches"], ["main"])
+        self.assertEqual(workflow["on"]["workflow_dispatch"], "")
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertNotIn("concurrency", workflow)
+        self.assertEqual(set(workflow["jobs"]), {"release-pr", "release"})
+        preparation = workflow["jobs"]["release-pr"]
+        publication = workflow["jobs"]["release"]
+        self.assertEqual(
+            preparation["if"],
+            "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+        )
+        self.assertEqual(
+            publication["if"],
+            "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+        )
+        self.assertEqual(
+            preparation["permissions"],
+            {"contents": "write", "pull-requests": "write"},
+        )
+        self.assertEqual(publication["permissions"], {"contents": "write"})
+        self.assertNotIn("environment", preparation)
+        self.assertEqual(publication["environment"], "release")
+        self.assertEqual(
+            preparation["concurrency"],
+            {"group": "changenote-release-main", "cancel-in-progress": "false"},
+        )
+        self.assertEqual(
+            publication["concurrency"],
+            {"group": "release", "cancel-in-progress": "false"},
+        )
+        self.assertEqual(preparation["steps"][-1]["with"]["operation"], "manage-pr")
+        self.assertNotIn("needs", publication)
+        self.assertFalse((ROOT / ".github/workflows/changenote.yml").exists())
+
     def test_release_workflow_reads_the_bumped_version_without_input(self):
         self.prepare_publication()
         self.add_note()
         self.run_command("changenote", "version")
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        self.assertNotIn("inputs:", workflow)
-        self.assertNotIn("inputs.version", workflow)
-        validation = workflow.split("      - name: Validate release request\n", 1)[1]
-        validation = validation.split("      - name: Run tests\n", 1)[0]
-        command = textwrap.dedent(validation.split("        run: |\n", 1)[1])
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/release.yml").read_text(),
+            Loader=yaml.BaseLoader,
+        )
+        self.assertEqual(workflow["on"]["workflow_dispatch"], "")
+        command = next(
+            step["run"]
+            for step in workflow["jobs"]["release"]["steps"]
+            if step.get("name") == "Validate release request"
+        )
         environment_file = self.root / "github-env"
         self.environment.update(
             GITHUB_REF="refs/heads/main",

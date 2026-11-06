@@ -1,18 +1,46 @@
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+  contents: read
 
 jobs:
+  release-pr:
+    name: Prepare Release PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: changenote-release-main
+      cancel-in-progress: false
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Manage Release PR
+        uses: narumiruna/changenote/release@f4423760122463bf03a8d161c6f0bc4173afb6e0
+        with:
+          operation: manage-pr
+          base-branch: main
+
   release:
     name: Sign, notarize, and publish
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
     runs-on: macos-26
     timeout-minutes: 60
     environment: release

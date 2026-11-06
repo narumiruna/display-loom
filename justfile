@@ -37,7 +37,7 @@ test:
 
 # Check changenote versioning and publication with temporary files and mocked remotes.
 test-release:
-    uv run --no-project python scripts/test-changenote.py
+    uv run --no-project --with pyyaml python scripts/test-changenote.py
 
 # Compile production code and run display-safe regression checks with Command Line Tools.
 test-performance:

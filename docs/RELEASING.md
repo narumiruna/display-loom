@@ -1,6 +1,6 @@
 # Releasing Display Loom
 
-Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The preferred release path is the manually triggered GitHub Actions workflow in `.github/workflows/release.yml`.
+Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The GitHub Actions workflow in `.github/workflows/release.yml` prepares Release PRs on pushes to `main` and runs signed publication only on manual dispatch.
 
 ## Change notes and versions
 
@@ -28,7 +28,7 @@ Use `patch` for fixes, `minor` for compatible features, and `major` for breaking
 
 ## Prepare a version
 
-The **Release PR** workflow runs on pushes to `main` and can also be started manually. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it before publication. This workflow never creates tags or GitHub Releases.
+The **Prepare Release PR** job in the **Release** workflow runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it before publication. This job never creates tags or GitHub Releases.
 
 To prepare the same changes locally instead, start from a clean checkout with pending notes:
 
@@ -84,9 +84,11 @@ The workflow imports these credentials into a temporary keychain, configures onl
 2. Choose **Run workflow** from `main`.
 3. Approve the `release` environment deployment if protection rules require it.
 
-The workflow:
+A manual run starts only the signing and publication job. Pushes to `main` only prepare Release PRs; they do not access Apple credentials or publish the app. The jobs use separate concurrency groups, so PR updates do not block publication.
 
-1. Reads the version prepared by changenote and rejects a non-`main` dispatch, invalid version, missing release notes, or existing tag or release.
+The publication job:
+
+1. Reads the version prepared by changenote and rejects an invalid version, missing release notes, or an existing tag or release.
 2. Runs unit tests without live display changes.
 3. Imports the Developer ID identity into an ephemeral keychain.
 4. Archives and exports a universal Release app with deterministic Developer ID signing.
@@ -176,7 +178,7 @@ With the pinned changenote CLI, XcodeGen, and uv installed, run:
 just test-release
 ```
 
-These checks use temporary files and mocked Git and GitHub commands. They verify version updates, note consumption, changelog extraction, generated-project stability, and publication guards. They do not sign apps, change displays, or create remote tags or Releases.
+These checks use temporary files and mocked Git and GitHub commands. They verify version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards. They do not sign apps, change displays, or create remote tags or Releases.
 
 ## Recovery
 
