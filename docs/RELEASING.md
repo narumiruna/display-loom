@@ -1,17 +1,55 @@
 # Releasing Display Loom
 
-Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The preferred release path is the manually triggered GitHub Actions workflow in `.github/workflows/release.yml`.
+Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The GitHub Actions workflow in `.github/workflows/release.yml` prepares Release PRs on pushes to `main` and runs signed publication only on manual dispatch.
+
+## Change notes and versions
+
+[changenote](https://github.com/narumiruna/changenote) manages the `display-loom` package. Install the CLI from the same commit as the Release PR Action:
+
+```sh
+cargo install --git https://github.com/narumiruna/changenote \
+  --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
+```
+
+Upgrade the CLI, Action, and schema pins together. The CLI needs a stable Rust toolchain with edition 2024 support.
+
+`Configuration/Version.xcconfig` is the release-version source for Debug and Release. Do not add `MARKETING_VERSION` overrides to `project.yml` or the generated project. A version bump does not require project regeneration.
+
+For a change that affects app users or release artifacts, add a note and commit it with the change:
+
+```sh
+changenote add improve-display-recovery \
+  --package display-loom --bump patch \
+  --message "Improve display recovery after wake."
+just changes
+```
+
+Use `patch` for fixes, `minor` for compatible features, and `major` for breaking changes. Changes without release impact, such as documentation-only changes and internal tooling updates, need no note. State the reason in the PR description. Do not create empty notes or run `changenote init` again.
 
 ## Prepare a version
 
-1. Update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`.
-2. Regenerate the Xcode project with `just generate`.
-3. Add `docs/releases/v<version>.md` with highlights, requirements, installation steps, and relevant warnings.
-4. Merge the changes into `main`. The workflow only releases the exact current `origin/main` commit.
+The **Prepare Release PR** job in the **Release** workflow runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it before publication. This job never creates tags or GitHub Releases.
 
-Version input uses `MAJOR.MINOR.PATCH` without the `v` prefix. The workflow creates the corresponding `v<version>` tag.
+To prepare the same changes locally instead, start from a clean checkout with pending notes:
+
+```sh
+just changes
+just version
+```
+
+Review and commit the changed version file, changelog, saved batch, and consumed-note deletions. A run without notes does not bump the version. Do not edit the saved batch manually or run `changenote tag`; the publication script owns release tags.
+
+`CURRENT_PROJECT_VERSION` remains a separate build number in `project.yml`; changenote does not change it. If a new build number is required, update it and run `just generate` in a separate change before preparing the release version. Keep the build number fixed during packaging and publication retries.
+
+Merge all release preparation into `main`. The publication workflow only releases the exact current `origin/main` commit. It reads the prepared version from `Configuration/Version.xcconfig`; no version input or additional bump is required. The workflow creates the corresponding `v<version>` tag and reads that version's release notes from `CHANGELOG.md`. Existing files in `docs/releases/` remain historical records; do not add new version files there.
 
 ## Configure GitHub Actions
+
+### Enable Release PRs
+
+Enable **Actions > General > Allow GitHub Actions to create and approve pull requests**. Branch rules must permit the bot to push `narumi/chore/changenote-release-main`. The Action never approves or merges its PR.
+
+The default `GITHUB_TOKEN` does not trigger PR workflows for bot-created PRs. If those workflows are required, configure a GitHub App token with contents and pull requests write permissions and pass it through the Action's `github-token` input. Verify repository permissions, branch rules, and token behavior on the first hosted run; local checks do not verify these settings. Do not merge another Release PR until the previous version and its app assets have been published.
 
 ### Export the signing identity
 
@@ -44,12 +82,13 @@ The workflow imports these credentials into a temporary keychain, configures onl
 
 1. Open **GitHub > Actions > Release**.
 2. Choose **Run workflow** from `main`.
-3. Enter the version without `v`, such as `0.2.0`.
-4. Approve the `release` environment deployment if protection rules require it.
+3. Approve the `release` environment deployment if protection rules require it.
 
-The workflow:
+A manual run starts only the signing and publication job. Pushes to `main` only prepare Release PRs; they do not access Apple credentials or publish the app. The jobs use separate concurrency groups, so PR updates do not block publication.
 
-1. Rejects a non-`main` dispatch, mismatched project version, missing release notes, or existing tag or release.
+The publication job:
+
+1. Reads the version prepared by changenote and rejects an invalid version, missing release notes, or an existing tag or release.
 2. Runs unit tests without live display changes.
 3. Imports the Developer ID identity into an ephemeral keychain.
 4. Archives and exports a universal Release app with deterministic Developer ID signing.
@@ -96,8 +135,11 @@ just package-release 0.2.0
 Review the artifact and release notes before explicitly confirming publication:
 
 ```sh
+changenote release-notes --package display-loom --version 0.2.0
 CONFIRM_PUBLISH=v0.2.0 just publish-release 0.2.0
 ```
+
+The publication script extracts this changelog entry into `.release/release-notes.md` before it creates a tag. A missing, duplicate, or empty version entry stops publication. Signing, notarization, Gatekeeper checks, and public release publication still require the existing macOS workflow or local credentials; Release PR automation does not verify them.
 
 ## Performance change validation
 
@@ -127,6 +169,16 @@ The following external checks remain unverified:
    - Expected result: saved mirror intent and recovery remain correct, stale operations do not change the final selection, and mirror transactions do not occupy the main thread.
    - Unverified behavior: private API compatibility, real display recovery, menu responsiveness, and system latency have not been established by test doubles.
    - Release restriction: observed safety or recovery failures block release. Do not claim measured latency gains or complete live-display validation without this evidence.
+
+## Release tooling checks
+
+With the pinned changenote CLI, XcodeGen, and uv installed, run:
+
+```sh
+just test-release
+```
+
+These checks use temporary files and mocked Git and GitHub commands. They verify version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards. They do not sign apps, change displays, or create remote tags or Releases.
 
 ## Recovery
 

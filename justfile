@@ -35,6 +35,10 @@ test:
       CODE_SIGNING_ALLOWED=NO \
       test
 
+# Check changenote versioning and publication with temporary files and mocked remotes.
+test-release:
+    uv run --no-project --with pyyaml python scripts/test-changenote.py
+
 # Compile production code and run display-safe regression checks with Command Line Tools.
 test-performance:
     ./scripts/check-performance.sh
@@ -49,6 +53,14 @@ test-live:
       RUN_VIRTUAL_DISPLAY_TESTS=1 \
       -only-testing:DisplayLoomTests/LiveVirtualDisplayTests/testCreatesAndSwitchesARealVirtualDisplayWhenExplicitlyEnabled \
       test
+
+# Show the release plan for pending change notes.
+changes:
+    changenote status
+
+# Update the release version and changelog, then consume pending notes.
+version:
+    changenote version
 
 # Build a universal Release app without requiring a signing identity.
 build-release:

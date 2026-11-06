@@ -4,10 +4,12 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+configFiles:
+  Debug: Configuration/Version.xcconfig
+  Release: Configuration/Version.xcconfig
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal

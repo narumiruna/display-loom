@@ -90,6 +90,10 @@ The opt-in integration test creates a real virtual display, changes its resoluti
 just test-live
 ```
 
+## Change notes and releases
+
+Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and signed app publication, and the [changelog](CHANGELOG.md) for release history.
+
 ## License
 
 [MIT](LICENSE)
