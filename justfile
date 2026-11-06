@@ -35,13 +35,19 @@ test:
       CODE_SIGNING_ALLOWED=NO \
       test
 
-# Check changenote versioning and publication with temporary files and mocked remotes.
+# Check release versioning, packaging, publication, and credential cleanup with mocks.
 test-release:
     uv run --no-project --with pyyaml python scripts/test-changenote.py
+    uv run python scripts/tests/test_release.py
 
 # Compile production code and run display-safe regression checks with Command Line Tools.
 test-performance:
     ./scripts/check-performance.sh
+
+# Check Swift source formatting and lint without modifying files.
+lint:
+    swift format lint --strict --recursive --parallel DisplayLoom DisplayLoomTests scripts/PerformanceCheckMain.swift
+    DEVELOPER_DIR="{{developer_dir}}" swiftlint lint --strict
 
 # Run the opt-in test that creates and switches a real virtual display.
 test-live:

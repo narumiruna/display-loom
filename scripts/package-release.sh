@@ -24,6 +24,7 @@ export_path="$release_dir/export"
 app_path="$export_path/Display Loom.app"
 artifact_name="Display-Loom-${version}.zip"
 artifact_path="$release_dir/$artifact_name"
+provenance_path="$artifact_path.commit"
 submission_path="$release_dir/notarization-submission.zip"
 export_options="$release_dir/ExportOptions.plist"
 notary_result="$release_dir/notarization.json"
@@ -38,8 +39,9 @@ done
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must use MAJOR.MINOR.PATCH format"
 current_branch="$(git branch --show-current)"
 [[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release artifacts must be built from main"
+source_commit="$(git rev-parse HEAD)"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
-[[ "$(git rev-parse HEAD)" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
+[[ "$source_commit" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
 
 project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
 build_version="$(awk -F'"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' project.yml)"
@@ -98,9 +100,9 @@ xcodebuild \
   -exportOptionsPlist "$export_options"
 
 [[ -d "$app_path" ]] || fail "exported app not found at $app_path"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Contents/Info.plist")" == "$version" ]] \
+[[ "$(plutil -extract CFBundleShortVersionString raw "$app_path/Contents/Info.plist")" == "$version" ]] \
   || fail "exported app has an unexpected version"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Contents/Info.plist")" == "$build_version" ]] \
+[[ "$(plutil -extract CFBundleVersion raw "$app_path/Contents/Info.plist")" == "$build_version" ]] \
   || fail "exported app has an unexpected build number"
 
 architectures="$(lipo -archs "$executable_path")"
@@ -129,11 +131,15 @@ xcrun stapler validate "$app_path"
 codesign --verify --deep --strict --verbose=2 "$app_path"
 spctl --assess --type execute --verbose=2 "$app_path"
 
-rm -f "$submission_path" "$artifact_path" "$artifact_path.sha256"
+rm -f "$submission_path" "$artifact_path" "$artifact_path.sha256" "$provenance_path"
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$artifact_path"
 (
   cd "$release_dir"
   shasum -a 256 "$artifact_name" >"$artifact_name.sha256"
 )
 
-printf 'Created:\n  %s\n  %s\n' "$artifact_path" "$artifact_path.sha256"
+[[ "$(git rev-parse HEAD)" == "$source_commit" ]] || fail "HEAD changed during packaging; rebuild the release"
+[[ -z "$(git status --porcelain)" ]] || fail "working tree changed during packaging; rebuild the release"
+printf '%s\n' "$source_commit" >"$provenance_path"
+
+printf 'Created:\n  %s\n  %s\n  %s\n' "$artifact_path" "$artifact_path.sha256" "$provenance_path"

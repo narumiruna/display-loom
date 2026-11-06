@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Dispatch
 import Foundation
 
 @testable import DisplayLoom
@@ -36,7 +37,8 @@ enum PerformanceChecks {
       state: PersistedState(
         profiles: (0..<count).map {
           VirtualDisplayProfile(name: "Display \($0)", resolutionID: "1920x1080")
-        }, hasAttemptedLoginItemRegistration: true
+        },
+        hasAttemptedLoginItemRegistration: true
       )
     )
     await environment.store.start()
@@ -45,7 +47,9 @@ enum PerformanceChecks {
 
   static func postScreenChange() {
     NotificationCenter.default.post(
-      name: NSApplication.didChangeScreenParametersNotification, object: nil)
+      name: NSApplication.didChangeScreenParametersNotification,
+      object: nil
+    )
   }
 
   static func notificationBurst() async throws {
@@ -88,12 +92,18 @@ enum PerformanceChecks {
     for _ in 0..<100 { postScreenChange() }
     await store.waitForDisplayUpdates()
     try require(
-      manager.mirrorAttempts.count == initial + 1, "Failure feedback must stop after one attempt")
+      manager.mirrorAttempts.count == initial + 1,
+      "Failure feedback must stop after one attempt"
+    )
     try require(store.hasMirrorRestoreFailure(profileID: profile.id), "Failure must be visible")
     try require(
-      store.profile(id: profile.id)?.mirrorSourceID == source.id, "Failure must preserve intent")
+      store.profile(id: profile.id)?.mirrorSourceID == source.id,
+      "Failure must preserve intent"
+    )
     try require(
-      store.takeLastErrorMessage() == nil, "Automatic failure must not produce a modal error")
+      store.takeLastErrorMessage() == nil,
+      "Automatic failure must not produce a modal error"
+    )
 
     await store.retryDesiredConnectionsAfterWake()
     try require(manager.mirrorAttempts.count == initial + 2, "Wake must grant one retry")
@@ -102,14 +112,20 @@ enum PerformanceChecks {
     manager.sources = [source]
     await store.handleDisplayReconfiguration()
     try require(
-      manager.mirrorAttempts.count == initial + 3, "Source reconnection must grant one retry")
+      manager.mirrorAttempts.count == initial + 3,
+      "Source reconnection must grant one retry"
+    )
     manager.setMirrorError = nil
     await store.setMirrorSource(source.id, for: profile.id)
     try require(
-      manager.mirrorAttempts.count == initial + 4, "Explicit selection must grant one retry")
+      manager.mirrorAttempts.count == initial + 4,
+      "Explicit selection must grant one retry"
+    )
     try require(store.isMirroring(profileID: profile.id), "Explicit retry must restore mirror")
     try require(
-      !store.hasMirrorRestoreFailure(profileID: profile.id), "Successful retry must clear failure")
+      !store.hasMirrorRestoreFailure(profileID: profile.id),
+      "Successful retry must clear failure"
+    )
     print("PASS F1: failure feedback bounded; explicit, wake, and reconnect retries preserved")
   }
 
@@ -122,7 +138,9 @@ enum PerformanceChecks {
     manager.sources = [source]
     await store.setMirrorSource(source.id, for: profile.id)
     manager.simulateActualMirror(
-      targetDisplayID: environment.backend.connections[profile.id]!.displayID, sourceID: nil)
+      targetDisplayID: environment.backend.connections[profile.id]!.displayID,
+      sourceID: nil
+    )
     let gate = MirrorCheckGate()
     manager.beforeMirror = { await gate.wait() }
     let scans = manager.excludedDisplayIDSets.count
@@ -134,20 +152,27 @@ enum PerformanceChecks {
     await store.setResolution(ResolutionPreset.preset(withID: "2560x1440")!, for: profile.id)
     try require(
       environment.backend.resolutionRequests.isEmpty,
-      "Pending mirror must reject resolution changes")
+      "Pending mirror must reject resolution changes"
+    )
     try require(store.takeLastErrorMessage() != nil, "Rejected resolution must report an error")
     manager.beforeMirror = nil
     gate.open()
     await store.waitForDisplayUpdates()
     try require(
       manager.excludedDisplayIDSets.count == scans + 2,
-      "Events during a pass must merge into one pending scan")
+      "Events during a pass must merge into one pending scan"
+    )
     try require(
-      store.mirrorSources == [source, newSource], "Pending pass must preserve the latest inventory")
+      store.mirrorSources == [source, newSource],
+      "Pending pass must preserve the latest inventory"
+    )
     try require(
-      store.profile(id: profile.id)?.resolutionID == "1920x1080", "Rejected mode must not be saved")
+      store.profile(id: profile.id)?.resolutionID == "1920x1080",
+      "Rejected mode must not be saved"
+    )
     print(
-      "PASS F1/F3: in-flight events merge; latest inventory retained; pending mode change rejected")
+      "PASS F1/F3: in-flight events merge; latest inventory retained; pending mode change rejected"
+    )
   }
 
   static func staleSelectionAndProfileIndex() async throws {
@@ -176,13 +201,17 @@ enum PerformanceChecks {
     await newSelection.value
     try require(store.profiles.count == 1, "Unrelated removal must remain removed")
     try require(
-      store.profile(id: id)?.mirrorSourceID == second.id, "Only the newest selection may persist")
+      store.profile(id: id)?.mirrorSourceID == second.id,
+      "Only the newest selection may persist"
+    )
     try require(
       store.activeMirrorSourceIDs[id] == second.id,
-      "Newest selection must be the final actual mirror")
+      "Newest selection must be the final actual mirror"
+    )
     try require(
       environment.repository.state.profiles[0].mirrorSourceID == second.id,
-      "Saved index must be revalidated after suspension")
+      "Saved index must be revalidated after suspension"
+    )
     print("PASS F3: stale selection ignored and changed profile index handled safely")
   }
 
@@ -216,12 +245,16 @@ enum PerformanceChecks {
       try require(connection.invalidated, "Cleanup must invalidate the old connection")
       try require(
         manager.mirrorSourceID(for: connection.displayID) == nil,
-        "Late mirror write must be cleared before invalidation")
+        "Late mirror write must be cleared before invalidation"
+      )
       try require(
-        store.activeMirrorSourceIDs[profile.id] == nil, "Late result must not restore store state")
+        store.activeMirrorSourceIDs[profile.id] == nil,
+        "Late result must not restore store state"
+      )
       try require(
         store.profile(id: profile.id)?.desiredConnected != true,
-        "Late result must not restore saved intent")
+        "Late result must not restore saved intent"
+      )
       if remove {
         try require(store.profile(id: profile.id) == nil, "Removed profile must not return")
       }
@@ -251,7 +284,8 @@ enum PerformanceChecks {
     await submitted.entered()
     try require(
       environment.backend.connectRequests.count == initialRequests,
-      "Reconnect must wait for the old mirror cleanup")
+      "Reconnect must wait for the old mirror cleanup"
+    )
     manager.beforeMirror = nil
     gate.open()
     await disconnect.value
@@ -259,9 +293,12 @@ enum PerformanceChecks {
     try require(oldConnection.invalidated, "Old connection must be invalidated before replacement")
     try require(
       environment.backend.connections[id]!.displayID != oldConnection.displayID,
-      "Reconnect must create a new handle")
+      "Reconnect must create a new handle"
+    )
     try require(
-      store.activeMirrorSourceIDs[id] == source.id, "Reconnect must restore saved mirror intent")
+      store.activeMirrorSourceIDs[id] == source.id,
+      "Reconnect must restore saved mirror intent"
+    )
     print("PASS lifecycle: reconnect waits for detached connection cleanup")
   }
 
@@ -284,14 +321,16 @@ enum PerformanceChecks {
     await submitted.entered()
     try require(
       backend.connectRequests.count == initialRequests,
-      "Replacement must await the superseded creation")
+      "Replacement must await the superseded creation"
+    )
     backend.beforeConnect = nil
     gate.open()
     await first.value
     await replacement.value
     try require(
       backend.createdConnections.dropLast().allSatisfy(\.invalidated),
-      "All superseded handles must be invalidated")
+      "All superseded handles must be invalidated"
+    )
     try require(backend.createdConnections.last?.isValid == true, "Replacement must remain valid")
     try require(store.state(for: id).isConnected, "Late creation must not replace current state")
     print("PASS lifecycle: superseded creation is awaited and its late handle is invalidated")
@@ -334,7 +373,8 @@ enum PerformanceChecks {
       await store.waitForDisplayUpdates()
       try require(
         manager.mirrorAttempts.filter { $0.targetDisplayID == target }.count == attempts + 2,
-        "A failed old operation must not consume a newer wake or mirror-state retry")
+        "A failed old operation must not consume a newer wake or mirror-state retry"
+      )
 
       manager.onMirrorAttempt = nil
       manager.setMirrorError = nil
@@ -342,10 +382,12 @@ enum PerformanceChecks {
       await store.retryDesiredConnectionsAfterWake()
       try require(
         !store.hasMirrorRestoreFailure(profileID: id),
-        "A reported error with the desired actual state must clear old restore failure")
+        "A reported error with the desired actual state must clear old restore failure"
+      )
     }
     print(
-      "PASS F1: in-flight failure preserves newer wake/topology retries and actual-state reporting")
+      "PASS F1: in-flight failure preserves newer wake/topology retries and actual-state reporting"
+    )
   }
 
   static func resolutionLifecycleAndFailures() async throws {
@@ -375,16 +417,20 @@ enum PerformanceChecks {
     try require(
       store.profile(id: id)?.resolutionID == newerMode.id
         && backend.appliedResolutionIDs[target] == newerMode.id,
-      "Mode metadata and actual mode must follow the newest request despite a changed array index")
+      "Mode metadata and actual mode must follow the newest request despite a changed array index"
+    )
 
     backend.setResolutionError = .modeSwitchFailed
     await store.setResolution(mode, for: id)
     try require(
-      store.profile(id: id)?.resolutionID == newerMode.id, "A failed mode must not be saved")
+      store.profile(id: id)?.resolutionID == newerMode.id,
+      "A failed mode must not be saved"
+    )
     try require(
       store.takeLastErrorMessage()
         == VirtualDisplayBackendError.modeSwitchFailed.localizedDescription,
-      "Mode error must be reported without double wrapping")
+      "Mode error must be reported without double wrapping"
+    )
     backend.setResolutionError = nil
 
     let fallbackGate = MirrorCheckGate()
@@ -406,15 +452,19 @@ enum PerformanceChecks {
     try require(
       store.profile(id: id)?.resolutionID == mode.id
         && backend.appliedResolutionIDs[target] == mode.id,
-      "A failed newer write must retain the preceding successful actual mode")
+      "A failed newer write must retain the preceding successful actual mode"
+    )
     try require(
-      store.takeLastErrorMessage() != nil, "The failed newest request must report an error")
+      store.takeLastErrorMessage() != nil,
+      "The failed newest request must report an error"
+    )
     backend.resolutionErrors.removeAll()
     await store.setResolution(newerMode, for: id)
     try require(
       store.profile(id: id)?.resolutionID == newerMode.id
         && backend.appliedResolutionIDs[target] == newerMode.id,
-      "Selecting the original saved mode must perform a write after the newer failure")
+      "Selecting the original saved mode must perform a write after the newer failure"
+    )
 
     let removalGate = MirrorCheckGate()
     backend.beforeResolution = { await removalGate.wait() }
@@ -425,7 +475,8 @@ enum PerformanceChecks {
     await pending.value
     try require(
       store.profiles.isEmpty && store.connectionStates.isEmpty,
-      "A late mode completion must not restore a removed profile")
+      "A late mode completion must not restore a removed profile"
+    )
     print("PASS regression: resolution ordering, changed indexes, errors, and removal")
   }
 
@@ -435,13 +486,20 @@ enum PerformanceChecks {
       let manager = FakeDisplayMirroringManager()
       let source = DisplayMirrorSource(id: UUID(), name: "Source")
       let profile = VirtualDisplayProfile(
-        name: "Lifetime", resolutionID: "1920x1080", mirrorSourceID: source.id)
+        name: "Lifetime",
+        resolutionID: "1920x1080",
+        mirrorSourceID: source.id
+      )
       var store: VirtualDisplayStore? = VirtualDisplayStore(
         backend: backend,
         repository: MemoryStateRepository(
           state: PersistedState(
-            profiles: [profile], hasAttemptedLoginItemRegistration: true)),
-        launchAtLoginManager: FakeLaunchAtLoginManager(), mirroringManager: manager,
+            profiles: [profile],
+            hasAttemptedLoginItemRegistration: true
+          )
+        ),
+        launchAtLoginManager: FakeLaunchAtLoginManager(),
+        mirroringManager: manager,
         wakeRetryDelayNanoseconds: 0
       )
       await store!.start()
@@ -459,21 +517,26 @@ enum PerformanceChecks {
       let weakStore = WeakStoreReference(store!)
       store = nil
       try require(
-        weakStore.value == nil, "Scheduled work must not retain the store across suspension")
+        weakStore.value == nil,
+        "Scheduled work must not retain the store across suspension"
+      )
       manager.beforeMirror = nil
       gate.open()
       await invalidated.entered()
       try require(publications == 0, "Released store must not receive late publications")
       try require(
         manager.excludedDisplayIDSets.count == scans + (suspended ? 1 : 0),
-        "Released store must not schedule another pass")
+        "Released store must not schedule another pass"
+      )
       try require(
         manager.mirrorSourceID(for: connection.displayID) == nil,
-        "Teardown must clear any late mirror")
+        "Teardown must clear any late mirror"
+      )
       subscription.cancel()
     }
     print(
-      "PASS lifecycle: store release before and during a pass; no late publication or follow-up")
+      "PASS lifecycle: store release before and during a pass; no late publication or follow-up"
+    )
   }
 
   static func mainActorResponsiveness() async throws {
@@ -526,25 +589,35 @@ enum PerformanceChecks {
       manager.onMirrorChange = nil
       try require(
         store.activeMirrorSourceIDs[first] == source.id,
-        "An earlier target must be revisited after a later target changes its state or source availability"
+        """
+        An earlier target must be revisited after a later target \
+        changes its state or source availability
+        """
       )
       try require(
         store.activeMirrorSourceIDs[second] == (sourceAppearsLater ? other.id : source.id),
-        "The later target must retain its requested source")
+        "The later target must retain its requested source"
+      )
       try require(
         manager.mirrorAttempts.count == initial + (sourceAppearsLater ? 2 : 3),
-        "Coordination must not issue redundant writes to unchanged targets")
+        "Coordination must not issue redundant writes to unchanged targets"
+      )
       try require(
-        environment.repository.state == saved, "Automatic coordination must not change saved intent"
+        environment.repository.state == saved,
+        "Automatic coordination must not change saved intent"
       )
       await store.setMirrorSource(nil, for: first)
       try require(
         store.profile(id: first)?.mirrorSourceID == nil
           && store.activeMirrorSourceIDs[first] == nil,
-        "Explicit clearing must not restore old intent")
+        "Explicit clearing must not restore old intent"
+      )
     }
     print(
-      "PASS regression: cross-target restoration, source return during a pass, and explicit clearing"
+      """
+      PASS regression: cross-target restoration, source return during a pass, \
+      and explicit clearing
+      """
     )
   }
 
@@ -560,23 +633,31 @@ enum PerformanceChecks {
     try require(oldConnection.invalidated, "Rename must invalidate old handle")
     try require(store.profile(id: id)?.name == "Renamed", "Rename must persist")
     try require(
-      store.activeMirrorSourceIDs[id] == source.id, "Rename must restore saved mirror intent")
+      store.activeMirrorSourceIDs[id] == source.id,
+      "Rename must restore saved mirror intent"
+    )
     let target = environment.backend.connections[id]!
     target.invalidate()
     await store.retryDesiredConnectionsAfterWake()
     try require(
       environment.backend.connections[id]!.displayID != target.displayID,
-      "Wake must reconnect an invalid handle")
+      "Wake must reconnect an invalid handle"
+    )
     try require(
-      store.activeMirrorSourceIDs[id] == source.id, "Wake must restore saved mirror intent")
+      store.activeMirrorSourceIDs[id] == source.id,
+      "Wake must restore saved mirror intent"
+    )
     let reloaded = VirtualDisplayTestEnvironment(state: environment.repository.state)
     reloaded.mirroringManager.sources = [source]
     await reloaded.store.start()
     try require(
-      reloaded.store.profile(id: id)?.name == "Renamed", "Reload must preserve saved name")
+      reloaded.store.profile(id: id)?.name == "Renamed",
+      "Reload must preserve saved name"
+    )
     try require(
       reloaded.store.activeMirrorSourceIDs[id] == source.id,
-      "Reload must restore saved mirror intent")
+      "Reload must restore saved mirror intent"
+    )
     print("PASS regression: saved intent, rename, wake reconnection, and reload")
   }
 }

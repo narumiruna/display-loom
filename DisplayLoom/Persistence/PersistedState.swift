@@ -1,5 +1,3 @@
-import Foundation
-
 struct PersistedState: Codable, Equatable, Sendable {
   static let currentVersion = 1
 

@@ -1,4 +1,18 @@
+excluded:
+  - .derivedData
+  - .release
+
 disabled_rules:
-  # swift-format owns these rules and intentionally produces a different style.
+  # swift-format owns brace layout and requires collection trailing commas.
   - opening_brace
   - trailing_comma
+  # Google Swift style does not impose file, type, or function line-count limits.
+  # Keep tightly coupled state machines and regression checks together.
+  - file_length
+  - type_body_length
+  - function_body_length
+
+line_length:
+  warning: 100
+  error: 100
+  ignores_urls: true

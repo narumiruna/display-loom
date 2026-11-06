@@ -15,6 +15,10 @@ done < <(find "$root/DisplayLoom" -name '*.swift' ! -name DisplayLoomApp.swift -
 
 xcrun clang -target "$target" -isysroot "$sdk" -fobjc-arc -Wall -Wextra -Werror \
   -c "$root/DisplayLoom/Bridge/VSCGVirtualDisplayBridge.m" -o "$build/bridge.o"
+xcrun clang -target "$target" -isysroot "$sdk" -fobjc-arc -O -Wall -Wextra -Werror \
+  -framework Foundation -framework CoreGraphics \
+  "$root/scripts/tests/BridgeRegressionChecks.m" -o "$build/check-bridge"
+"$build/check-bridge"
 xcrun swiftc -swift-version 5 -target "$target" -sdk "$sdk" -parse-as-library \
   -warnings-as-errors -typecheck -import-objc-header "$header" "${sources[@]}" \
   "$root/DisplayLoom/Application/DisplayLoomApp.swift"

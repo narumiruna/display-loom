@@ -8,7 +8,7 @@ Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. D
 ## Requirements
 
 - macOS 14.0 or later on an Intel or Apple Silicon Mac.
-- Xcode 15 or later to build from source.
+- Xcode 16 or later to build the checked-in project from source.
 
 ## Install
 
@@ -93,6 +93,28 @@ just test-live
 ## Change notes and releases
 
 Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and signed app publication, and the [changelog](CHANGELOG.md) for release history.
+
+## Development checks
+
+Run the release checks with [uv](https://docs.astral.sh/uv/), XcodeGen, and the pinned changenote CLI from the [release guide](docs/RELEASING.md) installed:
+
+```sh
+just test-release
+```
+
+These checks do not use signing credentials, change keychains, or publish releases.
+
+Swift code follows the [Google Swift Style Guide](https://google.github.io/swift/).
+Run the non-modifying source checks with Xcode and [SwiftLint](https://github.com/realm/SwiftLint) installed:
+
+```sh
+just lint
+```
+
+The formatter uses `.swift-format`. SwiftLint enforces the 100-column limit.
+File, type, and function line-count limits are disabled because the guide does not require them;
+keep tightly coupled code together. Import modules directly, and put multiple closure arguments
+inside the argument list. Automated checks do not replace a style review.
 
 ## License
 

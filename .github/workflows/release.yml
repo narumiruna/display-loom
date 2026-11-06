@@ -154,9 +154,7 @@ jobs:
             | grep -F "($DEVELOPMENT_TEAM)"
 
           {
-            echo "RELEASE_CERTIFICATE_PATH=$certificate_path"
             echo "RELEASE_KEYCHAIN_PATH=$keychain_path"
-            echo "RELEASE_KEYCHAIN_PASSWORD=$keychain_password"
             echo "NOTARY_KEYCHAIN=$keychain_path"
           } >>"$GITHUB_ENV"
 
@@ -199,7 +197,5 @@ jobs:
       - name: Delete temporary credentials
         if: always()
         run: |
-          if [[ -n "${RELEASE_KEYCHAIN_PATH:-}" && -f "$RELEASE_KEYCHAIN_PATH" ]]; then
-            security delete-keychain "$RELEASE_KEYCHAIN_PATH" || true
-          fi
-          rm -f "${RELEASE_CERTIFICATE_PATH:-}"
+          security delete-keychain "$RUNNER_TEMP/display-loom-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/developer-id-application.p12" "$RUNNER_TEMP/display-loom-signing.keychain-db"

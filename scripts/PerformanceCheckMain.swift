@@ -1,5 +1,3 @@
-import Foundation
-
 @main
 struct PerformanceCheckMain {
   static func main() async throws {

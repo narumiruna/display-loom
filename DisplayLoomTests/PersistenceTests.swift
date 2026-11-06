@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import DisplayLoom
@@ -26,8 +27,19 @@ final class PersistenceTests: XCTestCase {
 
   func testVersionOneProfileWithoutMirrorSourceRemainsCompatible() throws {
     let data = Data(
-      #"{"version":1,"profiles":[{"id":"00112233-4455-6677-8899-AABBCCDDEEFF","name":"Editing","resolutionID":"3840x2160","desiredConnected":true}],"hasAcknowledged8KWarning":false,"hasAttemptedLoginItemRegistration":true}"#
-        .utf8
+      """
+      {
+        "version": 1,
+        "profiles": [{
+          "id": "00112233-4455-6677-8899-AABBCCDDEEFF",
+          "name": "Editing",
+          "resolutionID": "3840x2160",
+          "desiredConnected": true
+        }],
+        "hasAcknowledged8KWarning": false,
+        "hasAttemptedLoginItemRegistration": true
+      }
+      """.utf8
     )
 
     let decoded = try JSONDecoder().decode(PersistedState.self, from: data)

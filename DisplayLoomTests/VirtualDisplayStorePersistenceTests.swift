@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import XCTest
 
 @testable import DisplayLoom
@@ -7,7 +8,11 @@ import XCTest
 final class VirtualDisplayStorePersistenceTests: XCTestCase {
   func testFlagUpdatesPreserveProfilesAndEachOtherAfterReload() async throws {
     let profile = VirtualDisplayProfile(
-      name: "Saved", resolutionID: "1920x1080", desiredConnected: false, mirrorSourceID: UUID())
+      name: "Saved",
+      resolutionID: "1920x1080",
+      desiredConnected: false,
+      mirrorSourceID: UUID()
+    )
     let environment = VirtualDisplayTestEnvironment(state: PersistedState(profiles: [profile]))
     XCTAssertTrue(environment.repository.savedStates.isEmpty)
 
@@ -20,27 +25,40 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
     await environment.store.start()
 
     let expected = PersistedState(
-      profiles: [profile], hasAcknowledged8KWarning: true, hasAttemptedLoginItemRegistration: true)
+      profiles: [profile],
+      hasAcknowledged8KWarning: true,
+      hasAttemptedLoginItemRegistration: true
+    )
     XCTAssertEqual(environment.repository.savedStates.count, 2)
     XCTAssertEqual(environment.repository.state, expected)
     XCTAssertEqual(environment.loginManager.registerCallCount, 1)
     let decoded = try JSONDecoder().decode(
-      PersistedState.self, from: JSONEncoder().encode(environment.repository.state))
+      PersistedState.self,
+      from: JSONEncoder().encode(environment.repository.state)
+    )
     let reloaded = VirtualDisplayTestEnvironment(state: decoded)
     await reloaded.store.start()
 
     XCTAssertEqual(reloaded.store.profiles, [profile])
     XCTAssertFalse(
-      reloaded.store.needs8KWarning(for: ResolutionPreset.preset(withID: "7680x4320")!))
+      reloaded.store.needs8KWarning(for: ResolutionPreset.preset(withID: "7680x4320")!)
+    )
     XCTAssertEqual(reloaded.loginManager.registerCallCount, 0)
     XCTAssertTrue(reloaded.repository.savedStates.isEmpty)
   }
 
   func testProfileMutationsPreserveFlagsOrderAndPublishedUpdatesAfterReload() async throws {
     var first = VirtualDisplayProfile(
-      name: "First", resolutionID: "1920x1080", desiredConnected: false, mirrorSourceID: UUID())
+      name: "First",
+      resolutionID: "1920x1080",
+      desiredConnected: false,
+      mirrorSourceID: UUID()
+    )
     var second = VirtualDisplayProfile(
-      name: "Second", resolutionID: "1920x1200", desiredConnected: false)
+      name: "Second",
+      resolutionID: "1920x1200",
+      desiredConnected: false
+    )
     let environment = VirtualDisplayTestEnvironment(
       state: PersistedState(
         profiles: [first, second],
@@ -55,7 +73,9 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
     await environment.store.renameProfile(id: first.id, to: "Studio")
     first.name = "Studio"
     await environment.store.setResolution(
-      ResolutionPreset.preset(withID: "2560x1440")!, for: second.id)
+      ResolutionPreset.preset(withID: "2560x1440")!,
+      for: second.id
+    )
     second.resolutionID = "2560x1440"
 
     XCTAssertEqual(environment.repository.state.profiles, [first, second])
@@ -70,13 +90,16 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
       XCTAssertTrue(state.hasAttemptedLoginItemRegistration)
     }
     let decoded = try JSONDecoder().decode(
-      PersistedState.self, from: JSONEncoder().encode(environment.repository.state))
+      PersistedState.self,
+      from: JSONEncoder().encode(environment.repository.state)
+    )
     let reloaded = VirtualDisplayTestEnvironment(state: decoded)
     await reloaded.store.start()
 
     XCTAssertEqual(reloaded.store.profiles, [second])
     XCTAssertFalse(
-      reloaded.store.needs8KWarning(for: ResolutionPreset.preset(withID: "7680x4320")!))
+      reloaded.store.needs8KWarning(for: ResolutionPreset.preset(withID: "7680x4320")!)
+    )
     XCTAssertEqual(reloaded.loginManager.registerCallCount, 0)
     XCTAssertTrue(reloaded.repository.savedStates.isEmpty)
   }
@@ -85,7 +108,10 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
     let profile = VirtualDisplayProfile(name: "Saved", resolutionID: "1920x1080")
     let environment = VirtualDisplayTestEnvironment(
       state: PersistedState(
-        version: 999, profiles: [profile], hasAttemptedLoginItemRegistration: true)
+        version: 999,
+        profiles: [profile],
+        hasAttemptedLoginItemRegistration: true
+      )
     )
 
     environment.store.acknowledge8KWarning()
@@ -93,7 +119,9 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
     XCTAssertEqual(
       environment.repository.state,
       PersistedState(
-        profiles: [profile], hasAcknowledged8KWarning: true, hasAttemptedLoginItemRegistration: true
+        profiles: [profile],
+        hasAcknowledged8KWarning: true,
+        hasAttemptedLoginItemRegistration: true
       )
     )
   }

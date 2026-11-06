@@ -21,6 +21,7 @@ release_dir="$root/.release"
 artifact_name="Display-Loom-${version}.zip"
 artifact_path="$release_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
+provenance_path="$artifact_path.commit"
 notes_path="$release_dir/release-notes.md"
 
 cd "$root"
@@ -41,16 +42,22 @@ project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit 
 [[ "$project_version" == "$version" ]] || fail "project version is $project_version, expected $version"
 [[ -f "$artifact_path" ]] || fail "release artifact not found: $artifact_path"
 [[ -f "$checksum_path" ]] || fail "checksum not found: $checksum_path"
-changenote release-notes --package display-loom --version "$version" >"$notes_path"
-[[ -s "$notes_path" ]] || fail "release notes are empty: $notes_path"
+[[ -f "$provenance_path" ]] || fail "commit provenance not found: $provenance_path; rebuild the release"
+
+head_commit="$(git rev-parse HEAD)"
+[[ "$(<"$provenance_path")" == "$head_commit" ]] \
+  || fail "release artifact was not packaged from HEAD; rebuild the release"
 
 (
   cd "$release_dir"
   shasum -a 256 -c "$artifact_name.sha256"
 )
 
+changenote release-notes --package display-loom --version "$version" >"$notes_path"
+[[ -s "$notes_path" ]] || fail "release notes are empty: $notes_path"
+
 git fetch --quiet origin main --tags
-head_commit="$(git rev-parse HEAD)"
+[[ "$(git rev-parse HEAD)" == "$head_commit" ]] || fail "HEAD changed during publication; rerun from the packaging commit"
 [[ "$head_commit" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
 
 if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then

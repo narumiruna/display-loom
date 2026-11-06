@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 
 /// Serializes display writes. Registration delays must run outside this worker.
@@ -5,27 +6,32 @@ final class DisplayOperationWorker: @unchecked Sendable {
   static let shared = DisplayOperationWorker()
 
   private let queue = DispatchQueue(
-    label: "dev.narumi.DisplayLoom.display-operations", qos: .userInitiated)
+    label: "dev.narumi.DisplayLoom.display-operations",
+    qos: .userInitiated
+  )
 
   init() {}
 
   func perform<T>(_ operation: @escaping () throws -> T) async throws -> T {
     let request = Request()
-    return try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { continuation in
-        queue.async {
-          guard request.start() else {
-            continuation.resume(throwing: CancellationError())
-            return
+    return try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { continuation in
+          queue.async {
+            guard request.start() else {
+              continuation.resume(throwing: CancellationError())
+              return
+            }
+            // Once started, return the result even if cancelled. The caller owns
+            // any resource created by the operation and must be able to release it.
+            continuation.resume(with: Result { try operation() })
           }
-          // Once started, return the result even if cancelled. The caller owns
-          // any resource created by the operation and must be able to release it.
-          continuation.resume(with: Result { try operation() })
         }
+      },
+      onCancel: {
+        request.cancel()
       }
-    } onCancel: {
-      request.cancel()
-    }
+    )
   }
 
   /// Queues cleanup that must run even when the calling task is cancelled.

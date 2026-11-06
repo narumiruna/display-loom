@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreGraphics
 import Foundation
 import os
 
@@ -102,7 +103,8 @@ final class VirtualDisplayStore: ObservableObject {
     hasAttemptedLoginItemRegistration = state.hasAttemptedLoginItemRegistration
     profiles = state.profiles
     connectionStates = Dictionary(
-      uniqueKeysWithValues: state.profiles.map { ($0.id, .disconnected) })
+      uniqueKeysWithValues: state.profiles.map { ($0.id, .disconnected) }
+    )
     backendAvailability = backend.availability
     launchAtLoginStatus = launchAtLoginManager.status
   }
@@ -309,11 +311,14 @@ final class VirtualDisplayStore: ObservableObject {
         }
       }
       resolutionTasks[profileID] = operation
-      await withTaskCancellationHandler {
-        await operation.value
-      } onCancel: {
-        operation.cancel()
-      }
+      await withTaskCancellationHandler(
+        operation: {
+          await operation.value
+        },
+        onCancel: {
+          operation.cancel()
+        }
+      )
       return
     }
 
@@ -332,7 +337,9 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   private func applyResolution(
-    _ resolution: ResolutionPreset, for profileID: UUID, connectionToken: UUID
+    _ resolution: ResolutionPreset,
+    for profileID: UUID,
+    connectionToken: UUID
   ) {
     guard connectionTokens[profileID] == connectionToken,
       let index = profiles.firstIndex(where: { $0.id == profileID }),
@@ -347,7 +354,8 @@ final class VirtualDisplayStore: ObservableObject {
     let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else {
       reportError(
-        String(localized: "error.emptyName", defaultValue: "The display name cannot be empty."))
+        String(localized: "error.emptyName", defaultValue: "The display name cannot be empty.")
+      )
       return
     }
     guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
@@ -424,7 +432,9 @@ final class VirtualDisplayStore: ObservableObject {
       reportError(
         String(
           format: String(
-            localized: "error.loginItem", defaultValue: "Could not update Launch at Login: %@"),
+            localized: "error.loginItem",
+            defaultValue: "Could not update Launch at Login: %@"
+          ),
           error.localizedDescription
         )
       )
@@ -469,7 +479,11 @@ final class VirtualDisplayStore: ObservableObject {
       }
       if let connection {
         await Self.cleanupConnection(
-          connection, after: operation?.task, using: manager, logger: logger)
+          connection,
+          after: operation?.task,
+          using: manager,
+          logger: logger
+        )
       }
       self?.finishCleanup(for: profileID, token: cleanupToken)
     }
@@ -509,7 +523,9 @@ final class VirtualDisplayStore: ObservableObject {
       reportError(
         String(
           localized: "error.invalidConfiguration",
-          defaultValue: "The virtual display configuration is invalid."))
+          defaultValue: "The virtual display configuration is invalid."
+        )
+      )
       return
     }
 
@@ -542,11 +558,14 @@ final class VirtualDisplayStore: ObservableObject {
     }
     pendingConnections[id] = creation
     do {
-      let connection = try await withTaskCancellationHandler {
-        try await creation.value
-      } onCancel: {
-        creation.cancel()
-      }
+      let connection = try await withTaskCancellationHandler(
+        operation: {
+          try await creation.value
+        },
+        onCancel: {
+          creation.cancel()
+        }
+      )
 
       guard connectionTokens[id] == token,
         let currentProfile = profiles.first(where: { $0.id == id }),
@@ -575,12 +594,14 @@ final class VirtualDisplayStore: ObservableObject {
     let cleanup = detachConnection(for: profileID)
     let message = String(
       localized: "error.unexpectedTermination",
-      defaultValue: "The virtual display was disconnected by macOS.")
+      defaultValue: "The virtual display was disconnected by macOS."
+    )
     connectionStates[profileID] = .failed(message: message)
     reportError(message)
     await cleanup?.value
     logger.error(
-      "Virtual display \(profileID.uuidString, privacy: .public) terminated unexpectedly")
+      "Virtual display \(profileID.uuidString, privacy: .public) terminated unexpectedly"
+    )
   }
 
   private func configureDefaultLaunchAtLoginIfNeeded() {
@@ -643,7 +664,11 @@ final class VirtualDisplayStore: ObservableObject {
       else { continue }
       requests.append(
         RestoreRequest(
-          profileID: profile.id, connectionToken: snapshot.connectionToken, sourceID: sourceID))
+          profileID: profile.id,
+          connectionToken: snapshot.connectionToken,
+          sourceID: sourceID
+        )
+      )
     }
     return requests
   }
@@ -670,7 +695,8 @@ final class VirtualDisplayStore: ObservableObject {
       onlineDisplays = [:]
       if !mirrorSources.isEmpty { mirrorSources = [] }
       logger.error(
-        "Could not refresh mirror sources: \(error.localizedDescription, privacy: .public)")
+        "Could not refresh mirror sources: \(error.localizedDescription, privacy: .public)"
+      )
     }
   }
 
@@ -689,13 +715,18 @@ final class VirtualDisplayStore: ObservableObject {
       let sourceID = profile(id: profileID)?.mirrorSourceID
     else { return nil }
     return RestoreSnapshot(
-      connectionToken: token, targetDisplayID: connection.displayID, sourceID: sourceID,
-      onlineDisplays: onlineDisplays, actualSources: activeMirrorSourceIDs
+      connectionToken: token,
+      targetDisplayID: connection.displayID,
+      sourceID: sourceID,
+      onlineDisplays: onlineDisplays,
+      actualSources: activeMirrorSourceIDs
     )
   }
 
   private func beginMirror(
-    _ sourceID: UUID?, for profileID: UUID, snapshot: RestoreSnapshot? = nil
+    _ sourceID: UUID?,
+    for profileID: UUID,
+    snapshot: RestoreSnapshot? = nil
   ) -> MirrorOperation? {
     guard let connection = connections[profileID], let token = connectionTokens[profileID]
     else { return nil }
@@ -716,16 +747,23 @@ final class VirtualDisplayStore: ObservableObject {
       }
     }
     let operation = MirrorOperation(
-      profileID: profileID, connectionToken: token, requestToken: requestToken,
-      connection: connection, sourceID: sourceID, snapshot: snapshot,
-      recoveryGeneration: recoveryGenerations[profileID], task: task
+      profileID: profileID,
+      connectionToken: token,
+      requestToken: requestToken,
+      connection: connection,
+      sourceID: sourceID,
+      snapshot: snapshot,
+      recoveryGeneration: recoveryGenerations[profileID],
+      task: task
     )
     mirrorOperations[profileID] = operation
     return operation
   }
 
   private func finishMirror(
-    _ operation: MirrorOperation, result: Result<Void, Error>, explicit: Bool
+    _ operation: MirrorOperation,
+    result: Result<Void, Error>,
+    explicit: Bool
   ) {
     let id = operation.profileID
     guard connectionTokens[id] == operation.connectionToken,
@@ -754,7 +792,10 @@ final class VirtualDisplayStore: ObservableObject {
         }
         setRestoreFailure(true, for: id)
         logger.error(
-          "Could not restore mirroring for \(id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)"
+          """
+          Could not restore mirroring for \(id.uuidString, privacy: .public): \
+          \(error.localizedDescription, privacy: .public)
+          """
         )
       }
     }
@@ -783,7 +824,8 @@ final class VirtualDisplayStore: ObservableObject {
     if case .unavailable(let reason) = backendAvailability { return reason }
     return String(
       localized: "error.apiUnavailable",
-      defaultValue: "This version of macOS does not provide the required virtual display API.")
+      defaultValue: "This version of macOS does not provide the required virtual display API."
+    )
   }
 
   private func reportError(_ message: String) {

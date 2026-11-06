@@ -68,10 +68,10 @@ private final class CoreGraphicsVirtualDisplayConnection: VirtualDisplayConnecti
   /// The mirror read and mode write run in the same worker operation.
   func setResolution(
     _ resolution: ResolutionPreset,
-    mirrorSourceDisplayID: (CGDirectDisplayID) -> CGDirectDisplayID
+    isInMirrorSet: (CGDirectDisplayID) -> Bool
   ) throws {
     guard isValid else { throw VirtualDisplayBackendError.invalidated }
-    guard mirrorSourceDisplayID(displayID) == kCGNullDirectDisplay else {
+    guard !isInMirrorSet(displayID) else {
       throw VirtualDisplayBackendError.invalidConfiguration
     }
     try handle.setMode(
@@ -95,7 +95,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
   private let isAPIAvailable: () -> Bool
   private let makeHandle: HandleFactory
   private let registrationClock: DisplayRegistrationClock
-  private let mirrorSourceDisplayID: (CGDirectDisplayID) -> CGDirectDisplayID
+  private let isInMirrorSet: (CGDirectDisplayID) -> Bool
   private let logger = Logger(subsystem: "dev.narumi.DisplayLoom", category: "Backend")
 
   init(
@@ -103,14 +103,13 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     isAPIAvailable: @escaping () -> Bool = { VSCGVirtualDisplayHandle.isAPIAvailable },
     makeHandle: @escaping HandleFactory = CoreGraphicsVirtualDisplayBackend.createHandle,
     registrationClock: DisplayRegistrationClock = .continuous,
-    mirrorSourceDisplayID: @escaping (CGDirectDisplayID) -> CGDirectDisplayID =
-      CGDisplayMirrorsDisplay
+    isInMirrorSet: @escaping (CGDirectDisplayID) -> Bool = { CGDisplayIsInMirrorSet($0) != 0 }
   ) {
     self.worker = worker
     self.isAPIAvailable = isAPIAvailable
     self.makeHandle = makeHandle
     self.registrationClock = registrationClock
-    self.mirrorSourceDisplayID = mirrorSourceDisplayID
+    self.isInMirrorSet = isInMirrorSet
   }
 
   var availability: VirtualDisplayBackendAvailability {
@@ -172,19 +171,24 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     do {
       while true {
         try Task.checkCancellation()
-        let registered = try await worker.perform { [registrationClock, mirrorSourceDisplayID] in
+        let registered = try await worker.perform { [registrationClock, isInMirrorSet] in
           guard registrationClock.now() < pending.deadline else {
             throw VirtualDisplayBackendError.registrationTimedOut
           }
           guard try pending.connection.checkRegistration() else { return false }
           try pending.connection.setResolution(
-            resolution, mirrorSourceDisplayID: mirrorSourceDisplayID)
+            resolution,
+            isInMirrorSet: isInMirrorSet
+          )
           return true
         }
         try Task.checkCancellation()
         if registered {
           logger.info(
-            "Connected virtual display \(profile.id.uuidString, privacy: .public) as \(pending.connection.displayID)"
+            """
+            Connected virtual display \(profile.id.uuidString, privacy: .public) \
+            as \(pending.connection.displayID)
+            """
           )
           return pending.connection
         }
@@ -215,8 +219,8 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     }
 
     do {
-      try await worker.perform { [mirrorSourceDisplayID, logger] in
-        try connection.setResolution(resolution, mirrorSourceDisplayID: mirrorSourceDisplayID)
+      try await worker.perform { [isInMirrorSet, logger] in
+        try connection.setResolution(resolution, isInMirrorSet: isInMirrorSet)
         logger.info("Set display \(connection.displayID) to \(resolution.id, privacy: .public)")
       }
     } catch is CancellationError {
@@ -224,7 +228,8 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     } catch {
       let mappedError = Self.mapError(error)
       logger.error(
-        "Could not switch display mode: \(mappedError.localizedDescription, privacy: .public)")
+        "Could not switch display mode: \(mappedError.localizedDescription, privacy: .public)"
+      )
       throw mappedError
     }
   }
@@ -238,7 +243,10 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     let orderedPresets = [resolution] + ResolutionPreset.catalog.filter { $0.id != resolution.id }
     let modeSpecs = orderedPresets.map {
       VSCGVirtualDisplayModeSpec(
-        width: UInt32($0.width), height: UInt32($0.height), refreshRate: 60)
+        width: UInt32($0.width),
+        height: UInt32($0.height),
+        refreshRate: 60
+      )
     }
     return try VSCGVirtualDisplayHandle.create(
       withName: profile.name,

@@ -243,14 +243,10 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
 
     NSMutableArray *privateModes = [NSMutableArray arrayWithCapacity:modes.count];
     for (VSCGVirtualDisplayModeSpec *mode in modes) {
-        id allocatedMode = [modeClass alloc];
-        id privateMode = ((id (*)(id, SEL, uint32_t, uint32_t, double))objc_msgSend)(
-            allocatedMode,
-            @selector(initWithWidth:height:refreshRate:),
-            mode.width,
-            mode.height,
-            mode.refreshRate
-        );
+        id privateMode = [(id<VSCGPrivateDisplayModeSelectors>)[modeClass alloc]
+            initWithWidth:mode.width
+                   height:mode.height
+              refreshRate:mode.refreshRate];
         if (privateMode == nil) {
             [terminationState cancel];
             if (error != NULL) {
@@ -266,12 +262,8 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
     VSCGSendObject(settings, @selector(setModes:), privateModes);
     VSCGSendUInt32(settings, @selector(setHiDPI:), 0);
 
-    id allocatedDisplay = [displayClass alloc];
-    id privateDisplay = ((id (*)(id, SEL, id))objc_msgSend)(
-        allocatedDisplay,
-        @selector(initWithDescriptor:),
-        descriptor
-    );
+    id privateDisplay = [(id<VSCGPrivateDisplaySelectors>)[displayClass alloc]
+        initWithDescriptor:descriptor];
     if (privateDisplay == nil) {
         [terminationState cancel];
         if (error != NULL) {
@@ -384,7 +376,7 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
 
     // Recheck on the worker immediately before the write. An earlier UI check
     // can be stale after a queued mirror transaction.
-    if (CGDisplayMirrorsDisplay(displayID) != kCGNullDirectDisplay) {
+    if (CGDisplayIsInMirrorSet(displayID)) {
         if (error != NULL) {
             *error = VSCGMakeError(VSCGVirtualDisplayErrorInvalidConfiguration,
                                    @"The display resolution cannot change while mirroring.");
