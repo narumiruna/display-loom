@@ -49,18 +49,17 @@ final class LiveVirtualDisplayTests: XCTestCase {
       throw XCTSkip("Connect a physical display to run the mirroring portion of this test.")
     }
 
-    try mirroringManager.setMirror(
+    try await mirroringManager.setMirror(
       targetDisplayID: connection.displayID,
       sourceID: source.id
     )
-    defer {
-      try? mirroringManager.setMirror(
-        targetDisplayID: connection.displayID,
-        sourceID: nil
-      )
-    }
 
     XCTAssertEqual(CGDisplayMirrorsDisplay(connection.displayID), sourceDisplayID)
     XCTAssertEqual(mirroringManager.mirrorSourceID(for: connection.displayID), source.id)
+
+    try await mirroringManager.setMirror(
+      targetDisplayID: connection.displayID,
+      sourceID: nil
+    )
   }
 }

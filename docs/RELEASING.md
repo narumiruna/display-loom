@@ -99,6 +99,35 @@ Review the artifact and release notes before explicitly confirming publication:
 CONFIRM_PUBLISH=v0.2.0 just publish-release 0.2.0
 ```
 
+## Performance change validation
+
+The display performance changes have deterministic checks in `just test-performance`. The same check functions have XCTest wrappers. These checks use the production store, backend, mirroring service, and Objective-C bridge with injected operations; they do not change the host's display configuration.
+
+Available evidence:
+
+- `just test-performance` passes 27 shared check functions: 14 backend/worker checks and 13 store/service groups. Three consecutive complete runs passed. Applicable pre-commit hooks, test-source syntax parsing, and Xcode project structure checks also passed.
+- With four unchanged profiles, 100 notifications produce one source scan, zero restore calls, and zero `objectWillChange` notifications. The baseline at `a7d259d` produced 100 scans, 400 restore attempts, and 1,000 publisher notifications. Publisher counts are not measured SwiftUI renders.
+- Gated operations verify registration yielding, a monotonic two-second registration deadline, cancellation and late-handle cleanup, serialized invalidation, and worker-side mirror checks before mode changes.
+- Store/service checks verify main-actor availability, merged updates during suspended work, failure feedback suppression, in-flight wake and topology recovery, stale-result rejection, replacement ordering, teardown, saved intent, and resolution error handling. Mode checks compare saved and applied resolutions, including an older successful write followed by a newer failed write.
+- The current Command Line Tools host compiles production Swift and Objective-C for the native arm64 macOS 14 target with warnings treated as errors. Intel x86_64 Swift type-checking and Objective-C syntax checks for the same deployment target also pass. This is not a full application build or a compatibility test on macOS 14 hardware. Public SDK headers do not require these configuration writes to run on the main thread; private API threading remains undocumented. Configuration callbacks must only schedule recovery, not perform configuration writes inline.
+
+The following external checks remain unverified:
+
+1. **Full application and XCTest validation**
+   - Responsible role: maintainer with a macOS build host and full Xcode.
+   - Prerequisite: the developer directory expected by `justfile`, or an explicit `DEVELOPER_DIR` override.
+   - Action: run `just build`, `just test`, and `just build-release` on the implementation revision. Run the repository pre-commit hooks and attach results. The live test must remain skipped in the default suite.
+   - Expected result: Debug and Release builds succeed and the unit suite passes. CLI checks alone do not verify application packaging or the full XCTest suite.
+   - Release restriction: do not release the implementation until these checks pass. On the current host, all three Xcode commands fail because `/Applications/Xcode.app/Contents/Developer` is absent.
+
+2. **Live display behavior and latency**
+   - Responsible role: maintainer who can safely change the host's display configuration.
+   - Prerequisite: a successful full build, a recoverable test setup, and explicit approval for display changes.
+   - Action: run `just test-live`; check multiple displays, rapid source changes, disconnect/reconnect during pending work, source reconnection, and sleep/wake. Capture a main-thread trace during mirror changes. Use macOS 14 and a current supported macOS version where available, and record missing OS/device coverage.
+   - Expected result: saved mirror intent and recovery remain correct, stale operations do not change the final selection, and mirror transactions do not occupy the main thread.
+   - Unverified behavior: private API compatibility, real display recovery, menu responsiveness, and system latency have not been established by test doubles.
+   - Release restriction: observed safety or recovery failures block release. Do not claim measured latency gains or complete live-display validation without this evidence.
+
 ## Recovery
 
 Before publication, delete `.release/` and rebuild. If a failed workflow or local publication created remote state, delete its draft GitHub Release and remote tag before retrying. If a public release may already have been downloaded, do not reuse its version; publish a patch version instead.

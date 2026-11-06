@@ -31,8 +31,9 @@ enum DisplayUUID {
 protocol DisplayMirroringManaging: AnyObject {
   func availableSources(excluding displayIDs: Set<CGDirectDisplayID>) throws
     -> [DisplayMirrorSource]
+  func onlineDisplayIdentities() throws -> [CGDirectDisplayID: UUID]
   func mirrorSourceID(for targetDisplayID: CGDirectDisplayID) -> UUID?
-  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) throws
+  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) async throws
 }
 
 enum DisplayMirroringError: LocalizedError, Equatable, Sendable {
@@ -76,6 +77,17 @@ enum DisplayMirroringError: LocalizedError, Equatable, Sendable {
 
 @MainActor
 final class DisplayMirroringManager: DisplayMirroringManaging {
+  private let worker: DisplayOperationWorker
+  private let configure: (CGDirectDisplayID, UUID?) throws -> Void
+
+  init(
+    worker: DisplayOperationWorker = .shared,
+    configure: ((CGDirectDisplayID, UUID?) throws -> Void)? = nil
+  ) {
+    self.worker = worker
+    self.configure = configure ?? Self.configureMirror
+  }
+
   private struct SourceCandidate {
     let id: UUID
     let name: String
@@ -124,7 +136,22 @@ final class DisplayMirroringManager: DisplayMirroringManaging {
     return DisplayUUID.uuid(for: sourceDisplayID)
   }
 
-  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) throws {
+  func onlineDisplayIdentities() throws -> [CGDirectDisplayID: UUID] {
+    try onlineDisplayIDs().reduce(into: [:]) { result, displayID in
+      result[displayID] = DisplayUUID.uuid(for: displayID)
+    }
+  }
+
+  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) async throws {
+    let configure = configure
+    try await worker.perform {
+      try configure(targetDisplayID, sourceID)
+    }
+  }
+
+  private nonisolated static func configureMirror(
+    targetDisplayID: CGDirectDisplayID, sourceID: UUID?
+  ) throws {
     guard CGDisplayIsOnline(targetDisplayID) != 0 else {
       throw DisplayMirroringError.targetUnavailable
     }

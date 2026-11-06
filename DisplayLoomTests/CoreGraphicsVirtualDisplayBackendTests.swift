@@ -82,6 +82,62 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
     }
   }
 
+  func testWorkerSkipsCancelledQueuedOperation() async throws {
+    try await BackendPerformanceChecks.workerSkipsCancelledQueuedOperation()
+  }
+
+  func testWorkerReturnsResultFromCancelledExecutingOperation() async throws {
+    try await BackendPerformanceChecks.workerReturnsResultFromCancelledExecutingOperation()
+  }
+
+  func testRegistrationYieldsWorkerToConnectedDisplayResolution() async throws {
+    try await BackendPerformanceChecks.registrationYieldsWorkerToConnectedDisplayResolution()
+  }
+
+  func testRegistrationTimeoutUsesOriginalMonotonicDeadline() async throws {
+    try await BackendPerformanceChecks.registrationTimeoutUsesOriginalMonotonicDeadline()
+  }
+
+  func testPendingInvalidationCleansUpOnce() async throws {
+    try await BackendPerformanceChecks.pendingInvalidationCleansUpOnce()
+  }
+
+  func testCancellationDuringRegistrationCleansUpOnce() async throws {
+    try await BackendPerformanceChecks.cancellationDuringRegistrationCleansUpOnce()
+  }
+
+  func testCancelledQueuedCreationDoesNotCreateHandle() async throws {
+    try await BackendPerformanceChecks.cancelledQueuedCreationDoesNotCreateHandle()
+  }
+
+  func testCancelledExecutingCreationOwnsAndCleansUpLateHandle() async throws {
+    try await BackendPerformanceChecks.cancelledExecutingCreationOwnsAndCleansUpLateHandle()
+  }
+
+  func testCancelledExecutingInitialModeCleansUpLateResult() async throws {
+    try await BackendPerformanceChecks.cancelledExecutingInitialModeCleansUpLateResult()
+  }
+
+  func testInitialModeFailureIsNormalizedAndCleansUpOnce() async throws {
+    try await BackendPerformanceChecks.initialModeFailureIsNormalizedAndCleansUpOnce()
+  }
+
+  func testInvalidationIsSerializedWithModeWriteAndKeepsDisplayID() async throws {
+    try await BackendPerformanceChecks.invalidationIsSerializedWithModeWriteAndKeepsDisplayID()
+  }
+
+  func testModeWriteRechecksMirrorStateOnWorker() async throws {
+    try await BackendPerformanceChecks.modeWriteRechecksMirrorStateOnWorker()
+  }
+
+  func testReleasedConnectionCleansUpOnce() async throws {
+    try await BackendPerformanceChecks.releasedConnectionCleansUpOnce()
+  }
+
+  func testMirroredInitialModeIsRejectedAndCleansUpOnce() async throws {
+    try await BackendPerformanceChecks.mirroredInitialModeIsRejectedAndCleansUpOnce()
+  }
+
   func testResolutionRejectsForeignConnectionWithNormalizedError() async {
     let backend = CoreGraphicsVirtualDisplayBackend()
 

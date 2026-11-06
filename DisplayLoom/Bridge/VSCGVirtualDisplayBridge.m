@@ -3,7 +3,6 @@
 #import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <unistd.h>
 
 @protocol VSCGPrivateDisplayDescriptorSelectors <NSObject>
 - (void)setVendorID:(uint32_t)value;
@@ -123,8 +122,6 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
 - (instancetype)initWithPrivateDisplay:(id)privateDisplay
                               displayID:(CGDirectDisplayID)displayID
                        terminationState:(VSCGTerminationState *)terminationState;
-- (BOOL)waitForRegistrationAndSetMode:(VSCGVirtualDisplayModeSpec *)mode
-                                error:(NSError **)error;
 @end
 
 @implementation VSCGVirtualDisplayHandle
@@ -300,21 +297,9 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
     }
 
     CGDirectDisplayID displayID = VSCGGetUInt32(privateDisplay, @selector(displayID));
-    VSCGVirtualDisplayHandle *handle = [[self alloc] initWithPrivateDisplay:privateDisplay
-                                                                 displayID:displayID
-                                                          terminationState:terminationState];
-
-    VSCGVirtualDisplayModeSpec *selectedMode = modes.firstObject;
-    NSError *modeError = nil;
-    if (![handle waitForRegistrationAndSetMode:selectedMode error:&modeError]) {
-        [handle invalidate];
-        if (error != NULL) {
-            *error = modeError;
-        }
-        return nil;
-    }
-
-    return handle;
+    return [[self alloc] initWithPrivateDisplay:privateDisplay
+                                     displayID:displayID
+                              terminationState:terminationState];
 }
 
 - (instancetype)initWithPrivateDisplay:(id)privateDisplay
@@ -329,32 +314,18 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
     return self;
 }
 
-- (BOOL)isValid {
+- (BOOL)isInvalidated {
     @synchronized (self) {
-        return _privateDisplay != nil &&
-               _displayID != kCGNullDirectDisplay &&
-               CGDisplayIsOnline(_displayID);
+        return _privateDisplay == nil;
     }
 }
 
-- (BOOL)waitForRegistrationAndSetMode:(VSCGVirtualDisplayModeSpec *)mode
-                                error:(NSError **)error {
-    static const NSUInteger maximumAttempts = 40;
-    for (NSUInteger attempt = 0; attempt < maximumAttempts; attempt += 1) {
-        if (CGDisplayIsOnline(self.displayID)) {
-            return [self setModeWithWidth:mode.width
-                                  height:mode.height
-                             refreshRate:mode.refreshRate
-                                   error:error];
-        }
-        usleep(50 * 1000);
-    }
-
-    if (error != NULL) {
-        *error = VSCGMakeError(VSCGVirtualDisplayErrorRegistrationTimedOut,
-                               @"The virtual display did not register within two seconds.");
-    }
-    return NO;
+- (BOOL)isValid {
+    // Do not hold the state lock during a CoreGraphics call. Main-thread reads
+    // must not wait for a mode write or the release of the private display.
+    return !self.invalidated &&
+           _displayID != kCGNullDirectDisplay &&
+           CGDisplayIsOnline(_displayID);
 }
 
 - (BOOL)setModeWithWidth:(uint32_t)width
@@ -411,6 +382,16 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
         return NO;
     }
 
+    // Recheck on the worker immediately before the write. An earlier UI check
+    // can be stale after a queued mirror transaction.
+    if (CGDisplayMirrorsDisplay(displayID) != kCGNullDirectDisplay) {
+        if (error != NULL) {
+            *error = VSCGMakeError(VSCGVirtualDisplayErrorInvalidConfiguration,
+                                   @"The display resolution cannot change while mirroring.");
+        }
+        return NO;
+    }
+
     CGError result = CGDisplaySetDisplayMode(displayID, selectedMode, NULL);
     if (result != kCGErrorSuccess) {
         if (error != NULL) {
@@ -425,11 +406,14 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
 }
 
 - (void)invalidate {
+    // Keep the last release outside the state lock. displayID stays immutable.
+    __attribute__((objc_precise_lifetime)) id privateDisplay = nil;
     @synchronized (self) {
         [_terminationState cancel];
+        privateDisplay = _privateDisplay;
         _privateDisplay = nil;
-        _displayID = kCGNullDirectDisplay;
     }
+    (void)privateDisplay;
 }
 
 - (void)dealloc {
