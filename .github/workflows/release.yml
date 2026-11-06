@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    types: [closed]
   workflow_dispatch:
 
 permissions:
@@ -35,7 +38,19 @@ jobs:
 
   release:
     name: Sign, notarize, and publish
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.ref == 'narumi/chore/changenote-release-main' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
     permissions:
       contents: write
     concurrency:
@@ -50,11 +65,11 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
     steps:
-      - name: Check out main
+      - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Install changenote
         run: cargo install --git https://github.com/narumiruna/changenote --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
@@ -66,7 +81,7 @@ jobs:
           set -euo pipefail
 
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
-            echo "Release workflow must be dispatched from main." >&2
+            echo "Release workflow must run from main." >&2
             exit 1
           }
           git fetch --quiet origin main --tags

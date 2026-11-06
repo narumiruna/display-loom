@@ -1,6 +1,6 @@
 # Releasing Display Loom
 
-Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The GitHub Actions workflow in `.github/workflows/release.yml` prepares Release PRs on pushes to `main` and runs signed publication only on manual dispatch.
+Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The GitHub Actions workflow in `.github/workflows/release.yml` prepares Release PRs on pushes to `main`. It starts signed publication when a Release PR is merged, or on manual dispatch.
 
 ## Change notes and versions
 
@@ -28,7 +28,7 @@ Use `patch` for fixes, `minor` for compatible features, and `major` for breaking
 
 ## Prepare a version
 
-The **Prepare Release PR** job in the **Release** workflow runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it before publication. This job never creates tags or GitHub Releases.
+The **Prepare Release PR** job in the **Release** workflow runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it to start publication automatically. This preparation job never creates tags or GitHub Releases.
 
 To prepare the same changes locally instead, start from a clean checkout with pending notes:
 
@@ -49,7 +49,7 @@ Merge all release preparation into `main`. The publication workflow only release
 
 Enable **Actions > General > Allow GitHub Actions to create and approve pull requests**. Branch rules must permit the bot to push `narumi/chore/changenote-release-main`. The Action never approves or merges its PR.
 
-The default `GITHUB_TOKEN` does not trigger PR workflows for bot-created PRs. If those workflows are required, configure a GitHub App token with contents and pull requests write permissions and pass it through the Action's `github-token` input. Verify repository permissions, branch rules, and token behavior on the first hosted run; local checks do not verify these settings. Do not merge another Release PR until the previous version and its app assets have been published.
+The default `GITHUB_TOKEN` does not trigger PR workflows for bot-created PRs. If those workflows are required, configure a GitHub App token with contents and pull requests write permissions and pass it through the Action's `github-token` input. Merge Release PRs with a maintainer account or a GitHub App token. A merge made with a workflow's `GITHUB_TOKEN` does not trigger automatic publication; use manual dispatch instead. Verify repository permissions, branch rules, and token behavior on the first hosted run; local checks do not verify these settings. Do not merge another Release PR until the previous version and its app assets have been published.
 
 ### Export the signing identity
 
@@ -80,11 +80,27 @@ The workflow imports these credentials into a temporary keychain and configures 
 
 ## Run the GitHub workflow
 
+### Automatic publication
+
+1. Review the prepared version and changelog in the Release PR.
+2. Merge the same-repository `narumi/chore/changenote-release-main` PR into `main`.
+3. Approve the `release` environment deployment if protection rules require it.
+
+Only a merged PR from this reserved branch in this repository starts automatic publication. Closing a PR without merging it, merging an ordinary PR, or merging a fork PR does not publish an app. Pushes to `main` only prepare Release PRs and do not access Apple credentials.
+
+The publication job checks out the Release PR's merge commit, not a moving branch. It rejects the release if current `origin/main` no longer matches that commit. Review current `main` and use manual dispatch to retry from that revision. Existing tag and GitHub Release checks still apply.
+
+The release operator must validate the first automatic run with configured credentials. Local event tests do not verify GitHub event delivery, environment rules, signing, notarization, or publication.
+
+### Manual publication
+
+Use manual dispatch for a locally prepared version, a Release PR merged before automatic publication was enabled, or a failed automatic run:
+
 1. Open **GitHub > Actions > Release**.
 2. Choose **Run workflow** from `main`.
 3. Approve the `release` environment deployment if protection rules require it.
 
-A manual run starts only the signing and publication job. Pushes to `main` only prepare Release PRs; they do not access Apple credentials or publish the app. The jobs use separate concurrency groups, so PR updates do not block publication.
+A manual run starts only the signing and publication job and checks out the commit selected at dispatch. The jobs use separate concurrency groups, so PR updates do not block publication.
 
 The publication job:
 
@@ -158,7 +174,7 @@ Available evidence:
 - With Xcode 26.6 at `/Applications/Xcode.app`, `just build`, `just test`, and `just build-release` passed for the review-finding implementation. XCTest reported 84 tests, with the live test skipped and zero failures. The unsigned Release build includes arm64 and x86_64. These results do not verify signing or notarization.
 - `just lint` passed strict Swift Format and SwiftLint checks with zero SwiftLint violations across 29 files.
 - `just test-performance` passed 15 backend/worker checks and 13 store/service groups, plus nine fake initializer ownership cases and three mirror mode guards. These checks do not change live displays.
-- `just test-release` passed eight changenote integration checks and 13 mocked release safety tests, including shell syntax checks. The combined suite preserves the separate workflow jobs and validates commit provenance. No real release operations ran.
+- `just test-release` passed nine changenote integration checks and 16 mocked release safety tests, including 13 event cases, stale-commit rejection, and shell syntax checks. The combined suite preserves the separate workflow jobs and validates commit provenance. No real release operations ran.
 - With four unchanged profiles, 100 notifications produce one source scan, zero restore calls, and zero `objectWillChange` notifications. The baseline at `a7d259d` produced 100 scans, 400 restore attempts, and 1,000 publisher notifications. Publisher counts are not measured SwiftUI renders.
 - Gated operations verify registration yielding, a monotonic two-second registration deadline, cancellation and late-handle cleanup, serialized invalidation, and worker-side mirror checks before mode changes.
 - Store/service checks verify main-actor availability, merged updates during suspended work, failure feedback suppression, in-flight wake and topology recovery, stale-result rejection, replacement ordering, teardown, saved intent, and resolution error handling. Mode checks compare saved and applied resolutions, including an older successful write followed by a newer failed write.
@@ -191,7 +207,7 @@ just test-release
 
 The recipe runs both release test suites:
 
-- `scripts/test-changenote.py` verifies version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards with temporary files and mocked Git and GitHub commands.
+- `scripts/test-changenote.py` verifies version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards with temporary files and mocked Git and GitHub commands. Event cases cover main and branch dispatches, pushes, merged Release PRs, ordinary PRs, fork PRs, other base branches, and unmerged or updated PRs. The checkout check requires the triggering merge commit or dispatch commit.
 - `scripts/tests/test_release.py` runs copies of the actual release scripts and the workflow certificate import and cleanup shell blocks. All external commands in this suite are mocked. It covers matching and stale commits, missing or empty provenance, checksum mismatch, source changes during packaging, and cleanup after import or identity validation failure. Rejected publication checks verify that no tag, push, or GitHub Release write is attempted. The suite also checks shell syntax for both scripts and every workflow shell step.
 
 These checks do not sign apps, change keychains or displays, or create remote tags or Releases. The real GitHub workflow is not tested in this work. A release operator must validate signing, notarization, and publication with configured credentials during a separately approved release.
