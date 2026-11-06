@@ -1,5 +1,6 @@
 import AppKit
 import ColorSync
+import CoreFoundation
 import CoreGraphics
 import Foundation
 
@@ -49,28 +50,33 @@ enum DisplayMirroringError: LocalizedError, Equatable, Sendable {
       return String(
         format: String(
           localized: "error.displayList",
-          defaultValue: "Could not list displays (CoreGraphics error %d)."),
+          defaultValue: "Could not list displays (CoreGraphics error %d)."
+        ),
         code
       )
     case .targetUnavailable:
       return String(
         localized: "error.mirrorTargetUnavailable",
-        defaultValue: "The virtual display is no longer available.")
+        defaultValue: "The virtual display is no longer available."
+      )
     case .sourceUnavailable:
       return String(
         localized: "error.mirrorSourceUnavailable",
-        defaultValue: "The selected source display is not available.")
+        defaultValue: "The selected source display is not available."
+      )
     case .configurationFailed(let code):
       return String(
         format: String(
           localized: "error.mirroring",
-          defaultValue: "Could not update display mirroring (CoreGraphics error %d)."),
+          defaultValue: "Could not update display mirroring (CoreGraphics error %d)."
+        ),
         code
       )
     case .verificationFailed:
       return String(
         localized: "error.mirrorVerification",
-        defaultValue: "macOS did not apply the requested display mirroring setting.")
+        defaultValue: "macOS did not apply the requested display mirroring setting."
+      )
     }
   }
 }
@@ -150,7 +156,8 @@ final class DisplayMirroringManager: DisplayMirroringManaging {
   }
 
   private nonisolated static func configureMirror(
-    targetDisplayID: CGDirectDisplayID, sourceID: UUID?
+    targetDisplayID: CGDirectDisplayID,
+    sourceID: UUID?
   ) throws {
     guard CGDisplayIsOnline(targetDisplayID) != 0 else {
       throw DisplayMirroringError.targetUnavailable

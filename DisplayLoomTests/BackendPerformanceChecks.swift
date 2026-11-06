@@ -1,4 +1,5 @@
 import CoreGraphics
+import Dispatch
 import Foundation
 
 @testable import DisplayLoom
@@ -17,11 +18,15 @@ enum BackendPerformanceChecks {
     try await cancelledExecutingInitialModeCleansUpLateResult()
     try await initialModeFailureIsNormalizedAndCleansUpOnce()
     try await invalidationIsSerializedWithModeWriteAndKeepsDisplayID()
+    try await unmirroredModeWritesReachHandle()
     try await modeWriteRechecksMirrorStateOnWorker()
     try await releasedConnectionCleansUpOnce()
     try await mirroredInitialModeIsRejectedAndCleansUpOnce()
     print(
-      "PASS F2: 14 backend/worker checks (registration, deadlines, cancellation, cleanup, mode safety)"
+      """
+      PASS F2: 15 backend/worker checks \
+      (registration, deadlines, cancellation, cleanup, mode safety)
+      """
     )
   }
 
@@ -172,7 +177,7 @@ enum BackendPerformanceChecks {
         gate.block()
         return handle
       },
-      mirrorSourceDisplayID: { _ in 0 }
+      isInMirrorSet: { _ in false }
     )
     let task = Task { try await connect(backend) }
     await gate.entered.wait()
@@ -207,7 +212,8 @@ enum BackendPerformanceChecks {
     handle.onSetMode = {
       throw NSError(
         domain: VSCGVirtualDisplayErrorDomain,
-        code: VSCGVirtualDisplayError.Code.modeUnavailable.rawValue)
+        code: VSCGVirtualDisplayError.Code.modeUnavailable.rawValue
+      )
     }
     let backend = makeBackend(worker: worker, handle: handle)
     let task = Task { try await connect(backend) }
@@ -249,30 +255,43 @@ enum BackendPerformanceChecks {
     try require(handle.modeCount == 2, "Invalidated mode write must not reach the handle")
   }
 
-  static func modeWriteRechecksMirrorStateOnWorker() async throws {
+  static func unmirroredModeWritesReachHandle() async throws {
     let worker = DisplayOperationWorker()
     let handle = BackendTestHandle(registered: true)
     let backend = makeBackend(worker: worker, handle: handle)
     let connection = try await connect(backend)
-    let gate = BackendWorkerGate()
-    worker.enqueue {
-      gate.block()
-      handle.mirrorSourceDisplayID = 99
-    }
-    await gate.entered.wait()
-    let sourceBeforeWrite = handle.mirrorSourceDisplayID
-    let task = Task { try await backend.setResolution(resolution, for: connection) }
-    gate.release()
-    do {
-      try await task.value
-      throw Failure("A mirror transaction before a mode write must reject the mode")
-    } catch let error as VirtualDisplayBackendError {
-      try require(error == .invalidConfiguration, "Mirrored mode error must be normalized")
-    }
-    try require(sourceBeforeWrite == 0, "Target must start unmirrored before the queued operation")
-    try require(handle.modeCount == 1, "Worker mirror recheck must prevent a second mode write")
+    try await backend.setResolution(resolution, for: connection)
+    try require(handle.modeCount == 2, "Unmirrored initial and later modes must reach the handle")
     connection.invalidate()
     try await worker.perform {}
+  }
+
+  static func modeWriteRechecksMirrorStateOnWorker() async throws {
+    for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
+      let worker = DisplayOperationWorker()
+      let handle = BackendTestHandle(registered: true)
+      let backend = makeBackend(worker: worker, handle: handle)
+      let connection = try await connect(backend)
+      let gate = BackendWorkerGate()
+      worker.enqueue {
+        gate.block()
+        handle.mirrorState = mirrorState
+      }
+      await gate.entered.wait()
+      let stateBeforeWrite = handle.mirrorState
+      let task = Task { try await backend.setResolution(resolution, for: connection) }
+      gate.release()
+      do {
+        try await task.value
+        throw Failure("A queued mirror \(mirrorState) must reject the mode")
+      } catch let error as VirtualDisplayBackendError {
+        try require(error == .invalidConfiguration, "Mirrored mode error must be normalized")
+      }
+      try require(stateBeforeWrite == .unmirrored, "Target must start unmirrored")
+      try require(handle.modeCount == 1, "Worker recheck must reject a mirror \(mirrorState)")
+      connection.invalidate()
+      try await worker.perform {}
+    }
   }
 
   static func releasedConnectionCleansUpOnce() async throws {
@@ -288,15 +307,17 @@ enum BackendPerformanceChecks {
   }
 
   static func mirroredInitialModeIsRejectedAndCleansUpOnce() async throws {
-    let worker = DisplayOperationWorker()
-    let handle = BackendTestHandle(registered: true)
-    handle.mirrorSourceDisplayID = 99
-    let backend = makeBackend(worker: worker, handle: handle)
-    let task = Task { try await connect(backend) }
-    try await requireFailure(task, expected: .invalidConfiguration)
-    try await worker.perform {}
-    try require(handle.modeCount == 0, "Mirrored initial mode must not reach the handle")
-    try require(handle.invalidationCount == 1, "Rejected initial mode must clean up once")
+    for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
+      let worker = DisplayOperationWorker()
+      let handle = BackendTestHandle(registered: true)
+      handle.mirrorState = mirrorState
+      let backend = makeBackend(worker: worker, handle: handle)
+      let task = Task { try await connect(backend) }
+      try await requireFailure(task, expected: .invalidConfiguration)
+      try await worker.perform {}
+      try require(handle.modeCount == 0, "Initial mode must reject a mirror \(mirrorState)")
+      try require(handle.invalidationCount == 1, "Rejected initial mode must clean up once")
+    }
   }
 
   private static var resolution: ResolutionPreset {
@@ -316,7 +337,7 @@ enum BackendPerformanceChecks {
         return handle
       },
       registrationClock: clock,
-      mirrorSourceDisplayID: { _ in handle.mirrorSourceDisplayID }
+      isInMirrorSet: { _ in handle.mirrorState != .unmirrored }
     )
   }
 
@@ -411,6 +432,10 @@ final class BackendWorkerGate: @unchecked Sendable {
 }
 
 final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Sendable {
+  enum MirrorState {
+    case unmirrored, secondary, primary
+  }
+
   let displayID: CGDirectDisplayID
   private let lock = NSLock()
   private var registered = false
@@ -418,7 +443,7 @@ final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Se
   private var creations = 0
   private var invalidations = 0
   private var modes = 0
-  private var source: CGDirectDisplayID = kCGNullDirectDisplay
+  private var mirroring = MirrorState.unmirrored
   // Set hooks before the operation starts; do not change them while it runs.
   var onSetMode: (() throws -> Void)?
   var onInvalidate: (() -> Void)?
@@ -458,15 +483,15 @@ final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Se
     return modes
   }
 
-  var mirrorSourceDisplayID: CGDirectDisplayID {
+  var mirrorState: MirrorState {
     get {
       lock.lock()
       defer { lock.unlock() }
-      return source
+      return mirroring
     }
     set {
       lock.lock()
-      source = newValue
+      mirroring = newValue
       lock.unlock()
     }
   }
@@ -548,26 +573,28 @@ final class BackendRegistrationTestClock: @unchecked Sendable {
   }
 
   private func sleep(_ seconds: TimeInterval) async throws {
-    try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation {
-        (continuation: CheckedContinuation<Void, Error>) in
-        lock.lock()
-        if cancelled {
+    try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { (pending: CheckedContinuation<Void, Error>) in
+          lock.lock()
+          if cancelled {
+            lock.unlock()
+            pending.resume(throwing: CancellationError())
+            return
+          }
+          precondition(sleeper == nil)
+          sleeper = pending
+          interval = seconds
+          let pendingObservers = observers
+          observers.removeAll()
           lock.unlock()
-          continuation.resume(throwing: CancellationError())
-          return
+          for observer in pendingObservers { observer.resume(returning: seconds) }
         }
-        precondition(sleeper == nil)
-        sleeper = continuation
-        interval = seconds
-        let pendingObservers = observers
-        observers.removeAll()
-        lock.unlock()
-        for observer in pendingObservers { observer.resume(returning: seconds) }
+      },
+      onCancel: {
+        self.cancelSleep()
       }
-    } onCancel: {
-      self.cancelSleep()
-    }
+    )
   }
 
   private func cancelSleep() {

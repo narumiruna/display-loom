@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import XCTest
 
 @testable import DisplayLoom
@@ -35,7 +36,9 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[first.id], source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[second.id], source.id)
     XCTAssertEqual(
-      environment.repository.state.profiles.map(\.mirrorSourceID), [source.id, source.id])
+      environment.repository.state.profiles.map(\.mirrorSourceID),
+      [source.id, source.id]
+    )
     XCTAssertTrue(environment.store.mirrorRestoreFailures.isEmpty)
   }
 
@@ -76,7 +79,9 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
       if environment.mirroringManager.mirrorSourceID(for: secondTarget) != nil {
         environment.mirroringManager.onMirrorChange = nil
         environment.mirroringManager.simulateActualMirror(
-          targetDisplayID: firstTarget, sourceID: nil)
+          targetDisplayID: firstTarget,
+          sourceID: nil
+        )
       }
       environment.store.scheduleDisplayReconfiguration()
     }
@@ -129,7 +134,9 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[first.id], source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[second.id], otherSource.id)
     XCTAssertEqual(
-      environment.repository.state.profiles.map(\.mirrorSourceID), [source.id, otherSource.id])
+      environment.repository.state.profiles.map(\.mirrorSourceID),
+      [source.id, otherSource.id]
+    )
     XCTAssertTrue(environment.store.mirrorRestoreFailures.isEmpty)
   }
 
@@ -186,7 +193,9 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     defer { environment.mirroringManager.onMirrorChange = nil }
 
     NotificationCenter.default.post(
-      name: NSApplication.didChangeScreenParametersNotification, object: nil)
+      name: NSApplication.didChangeScreenParametersNotification,
+      object: nil
+    )
     await fulfillment(of: [restored], timeout: 2)
     await environment.store.waitForDisplayUpdates()
 

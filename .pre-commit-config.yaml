@@ -9,21 +9,21 @@ repos:
       - id: trailing-whitespace
   - repo: local
     hooks:
-      - id: swiftlint
-        name: SwiftLint
-        entry: env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swiftlint --fix
+      - id: swift-format
+        name: swift-format
+        entry: swift format format --in-place --recursive --parallel
         language: system
         types: [swift]
         require_serial: true
-      - id: swift-format
-        name: swift-format
-        entry: swift-format format --in-place --recursive --parallel
+      - id: swiftlint
+        name: SwiftLint
+        entry: env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swiftlint lint --strict
         language: system
         types: [swift]
         require_serial: true
       - id: swift-format-lint
         name: swift-format-lint
-        entry: swift-format lint --strict --recursive --parallel
+        entry: swift format lint --strict --recursive --parallel
         language: system
         types: [swift]
         require_serial: true

@@ -28,7 +28,8 @@ final class ResolutionPresetTests: XCTestCase {
         "3840x2400",
         "7680x4320",
         "7680x4800",
-      ]))
+      ])
+    )
     XCTAssertFalse(ResolutionPreset.preset(withID: "3840x2160")!.is8K)
     XCTAssertTrue(ResolutionPreset.preset(withID: "7680x4320")!.is8K)
   }

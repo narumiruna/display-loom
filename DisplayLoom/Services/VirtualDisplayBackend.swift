@@ -49,40 +49,53 @@ enum VirtualDisplayBackendError: LocalizedError, Equatable {
     case .apiUnavailable:
       return String(
         localized: "error.apiUnavailable",
-        defaultValue: "This version of macOS does not provide the required virtual display API.")
+        defaultValue: "This version of macOS does not provide the required virtual display API."
+      )
     case .invalidConfiguration:
       return String(
         localized: "error.invalidConfiguration",
-        defaultValue: "The virtual display configuration is invalid.")
+        defaultValue: "The virtual display configuration is invalid."
+      )
     case .creationFailed:
       return String(
         localized: "error.creationFailed",
         defaultValue:
-          "macOS could not create the virtual display. The system display limit may have been reached."
+          """
+          macOS could not create the virtual display. \
+          The system display limit may have been reached.
+          """
       )
     case .settingsRejected:
       return String(
         localized: "error.settingsRejected",
-        defaultValue: "macOS rejected the requested virtual display settings.")
+        defaultValue: "macOS rejected the requested virtual display settings."
+      )
     case .registrationTimedOut:
       return String(
         localized: "error.registrationTimedOut",
-        defaultValue: "The virtual display did not appear within two seconds.")
+        defaultValue: "The virtual display did not appear within two seconds."
+      )
     case .modeUnavailable:
       return String(
         localized: "error.modeUnavailable",
-        defaultValue: "The selected resolution is not available on this Mac.")
+        defaultValue: "The selected resolution is not available on this Mac."
+      )
     case .modeSwitchFailed:
       return String(
         localized: "error.modeSwitchFailed",
-        defaultValue: "macOS could not switch to the selected resolution.")
+        defaultValue: "macOS could not switch to the selected resolution."
+      )
     case .invalidated:
       return String(
-        localized: "error.invalidated", defaultValue: "The virtual display is no longer connected.")
+        localized: "error.invalidated",
+        defaultValue: "The virtual display is no longer connected."
+      )
     case .unexpected(let detail):
       return String(
         format: String(
-          localized: "error.unexpected", defaultValue: "An unexpected error occurred: %@"),
+          localized: "error.unexpected",
+          defaultValue: "An unexpected error occurred: %@"
+        ),
         detail
       )
     }

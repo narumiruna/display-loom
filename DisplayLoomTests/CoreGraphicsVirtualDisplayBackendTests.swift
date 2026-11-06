@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import DisplayLoom
@@ -17,8 +18,10 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
 
     for (code, expected) in cases {
       let error = NSError(
-        domain: VSCGVirtualDisplayErrorDomain, code: code.rawValue,
-        userInfo: [NSLocalizedDescriptionKey: "Unlocalized bridge detail"])
+        domain: VSCGVirtualDisplayErrorDomain,
+        code: code.rawValue,
+        userInfo: [NSLocalizedDescriptionKey: "Unlocalized bridge detail"]
+      )
       let mapped = CoreGraphicsVirtualDisplayBackend.mapError(error)
 
       XCTAssertEqual(mapped, expected)
@@ -28,28 +31,34 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
 
   func testUnknownBridgeCodeRetainsDetailInLocalizedFallback() {
     let error = NSError(
-      domain: VSCGVirtualDisplayErrorDomain, code: 999,
-      userInfo: [NSLocalizedDescriptionKey: "Unknown bridge failure"])
+      domain: VSCGVirtualDisplayErrorDomain,
+      code: 999,
+      userInfo: [NSLocalizedDescriptionKey: "Unknown bridge failure"]
+    )
 
     let mapped = CoreGraphicsVirtualDisplayBackend.mapError(error)
 
     XCTAssertEqual(mapped, .unexpected(error.localizedDescription))
     XCTAssertEqual(
       mapped.localizedDescription,
-      VirtualDisplayBackendError.unexpected(error.localizedDescription).localizedDescription)
+      VirtualDisplayBackendError.unexpected(error.localizedDescription).localizedDescription
+    )
   }
 
   func testOtherErrorDomainDoesNotMatchAKnownBridgeCode() {
     let error = NSError(
-      domain: "BackendTests", code: VSCGVirtualDisplayError.Code.apiUnavailable.rawValue,
-      userInfo: [NSLocalizedDescriptionKey: "Unrelated failure"])
+      domain: "BackendTests",
+      code: VSCGVirtualDisplayError.Code.apiUnavailable.rawValue,
+      userInfo: [NSLocalizedDescriptionKey: "Unrelated failure"]
+    )
 
     let mapped = CoreGraphicsVirtualDisplayBackend.mapError(error)
 
     XCTAssertEqual(mapped, .unexpected(error.localizedDescription))
     XCTAssertEqual(
       mapped.localizedDescription,
-      VirtualDisplayBackendError.unexpected(error.localizedDescription).localizedDescription)
+      VirtualDisplayBackendError.unexpected(error.localizedDescription).localizedDescription
+    )
   }
 
   func testAlreadyNormalizedErrorsAreNotWrappedAgain() {
@@ -124,6 +133,10 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
 
   func testInvalidationIsSerializedWithModeWriteAndKeepsDisplayID() async throws {
     try await BackendPerformanceChecks.invalidationIsSerializedWithModeWriteAndKeepsDisplayID()
+  }
+
+  func testUnmirroredModeWritesReachHandle() async throws {
+    try await BackendPerformanceChecks.unmirroredModeWritesReachHandle()
   }
 
   func testModeWriteRechecksMirrorStateOnWorker() async throws {

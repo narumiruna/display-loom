@@ -35,7 +35,8 @@ final class StateRepository: StatePersisting {
       return state
     } catch {
       logger.error(
-        "Could not decode persisted state: \(error.localizedDescription, privacy: .public)")
+        "Could not decode persisted state: \(error.localizedDescription, privacy: .public)"
+      )
       return PersistedState()
     }
   }
@@ -45,7 +46,8 @@ final class StateRepository: StatePersisting {
       defaults.set(try encoder.encode(state), forKey: Self.storageKey)
     } catch {
       logger.error(
-        "Could not encode persisted state: \(error.localizedDescription, privacy: .public)")
+        "Could not encode persisted state: \(error.localizedDescription, privacy: .public)"
+      )
     }
   }
 }

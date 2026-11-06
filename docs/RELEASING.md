@@ -76,7 +76,7 @@ Add these environment secrets:
 | `APPLE_ID` | Apple ID used for notarization |
 | `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password generated at `account.apple.com` |
 
-The workflow imports these credentials into a temporary keychain, configures only Apple signing tools to use the private key, and deletes temporary credential files at the end of the job.
+The workflow imports these credentials into a temporary keychain and configures only Apple signing tools to use the private key. Its `always()` cleanup step deletes the deterministic certificate and keychain paths under `RUNNER_TEMP`, including when certificate import or identity validation fails before environment variables are exported.
 
 ## Run the GitHub workflow
 
@@ -94,8 +94,8 @@ The publication job:
 4. Archives and exports a universal Release app with deterministic Developer ID signing.
 5. Submits the app to Apple notarization and waits for acceptance.
 6. Staples the ticket and verifies the version, build, architectures, signature, signing team, and Gatekeeper result.
-7. Creates the ZIP and SHA-256 checksum.
-8. Creates an annotated tag, uploads a draft GitHub Release, validates its assets, and makes it public.
+7. Creates the ZIP, SHA-256 checksum, and local commit sidecar after checking that `HEAD` and the working tree have not changed during packaging.
+8. Verifies that the sidecar matches `HEAD` and current `origin/main`, creates an annotated tag, uploads the ZIP and checksum to a draft GitHub Release, validates its two assets, and makes it public.
 
 Automated tags are annotated but not cryptographically signed because GitHub Actions does not use a maintainer's local signing key. Local publication creates a signed tag.
 
@@ -130,7 +130,15 @@ just test
 just package-release 0.2.0
 ```
 
-`package-release` creates `.release/Display-Loom-<version>.zip` and its SHA-256 checksum after all signing, notarization, and Gatekeeper checks pass. Do not modify the ZIP; rebuild it instead.
+`package-release` creates these files after all signing, notarization, and Gatekeeper checks pass:
+
+- `.release/Display-Loom-<version>.zip`
+- `.release/Display-Loom-<version>.zip.sha256`
+- `.release/Display-Loom-<version>.zip.commit`
+
+The `.commit` sidecar records the full source `HEAD` captured before packaging. Packaging rechecks `HEAD` and the clean working tree before writing the sidecar. If either changed, packaging fails without a valid sidecar. Do not modify these files; rebuild them instead.
+
+Publication requires the recorded commit to match `HEAD`, requires `HEAD` to match current `origin/main`, and verifies the ZIP checksum before creating a tag or writing to GitHub. A missing or stale sidecar blocks publication even when the version and checksum still match. Repackage from the intended commit; do not copy or edit a sidecar to reuse an old ZIP. Only the ZIP and checksum are public release assets.
 
 Review the artifact and release notes before explicitly confirming publication:
 
@@ -143,32 +151,35 @@ The publication script extracts this changelog entry into `.release/release-note
 
 ## Performance change validation
 
-The display performance changes have deterministic checks in `just test-performance`. The same check functions have XCTest wrappers. These checks use the production store, backend, mirroring service, and Objective-C bridge with injected operations; they do not change the host's display configuration.
+The display performance changes have deterministic checks in `just test-performance`. The backend and store check functions also have XCTest wrappers. The bridge fake checks run as a separate executable. These checks use production code with injected operations; they do not change the host's display configuration.
 
 Available evidence:
 
-- `just test-performance` passes 27 shared check functions: 14 backend/worker checks and 13 store/service groups. Three consecutive complete runs passed. Applicable pre-commit hooks, test-source syntax parsing, and Xcode project structure checks also passed.
+- With Xcode 26.6 at `/Applications/Xcode.app`, `just build`, `just test`, and `just build-release` passed for the review-finding implementation. XCTest reported 84 tests, with the live test skipped and zero failures. The unsigned Release build includes arm64 and x86_64. These results do not verify signing or notarization.
+- `just lint` passed strict Swift Format and SwiftLint checks with zero SwiftLint violations across 29 files.
+- `just test-performance` passed 15 backend/worker checks and 13 store/service groups, plus nine fake initializer ownership cases and three mirror mode guards. These checks do not change live displays.
+- `just test-release` passed eight changenote integration checks and 13 mocked release safety tests, including shell syntax checks. The combined suite preserves the separate workflow jobs and validates commit provenance. No real release operations ran.
 - With four unchanged profiles, 100 notifications produce one source scan, zero restore calls, and zero `objectWillChange` notifications. The baseline at `a7d259d` produced 100 scans, 400 restore attempts, and 1,000 publisher notifications. Publisher counts are not measured SwiftUI renders.
 - Gated operations verify registration yielding, a monotonic two-second registration deadline, cancellation and late-handle cleanup, serialized invalidation, and worker-side mirror checks before mode changes.
 - Store/service checks verify main-actor availability, merged updates during suspended work, failure feedback suppression, in-flight wake and topology recovery, stale-result rejection, replacement ordering, teardown, saved intent, and resolution error handling. Mode checks compare saved and applied resolutions, including an older successful write followed by a newer failed write.
-- The current Command Line Tools host compiles production Swift and Objective-C for the native arm64 macOS 14 target with warnings treated as errors. Intel x86_64 Swift type-checking and Objective-C syntax checks for the same deployment target also pass. This is not a full application build or a compatibility test on macOS 14 hardware. Public SDK headers do not require these configuration writes to run on the main thread; private API threading remains undocumented. Configuration callbacks must only schedule recovery, not perform configuration writes inline.
+- Earlier Command Line Tools checks compiled production Swift and Objective-C for the native arm64 macOS 14 target with warnings treated as errors. Intel x86_64 Swift type-checking and Objective-C syntax checks for the same deployment target also passed. Those checks were not a full application build or a compatibility test on macOS 14 hardware. Public SDK headers do not require these configuration writes to run on the main thread; private API threading remains undocumented. Configuration callbacks must only schedule recovery, not perform configuration writes inline.
 
 The following external checks remain unverified:
 
-1. **Full application and XCTest validation**
-   - Responsible role: maintainer with a macOS build host and full Xcode.
-   - Prerequisite: the developer directory expected by `justfile`, or an explicit `DEVELOPER_DIR` override.
-   - Action: run `just build`, `just test`, and `just build-release` on the implementation revision. Run the repository pre-commit hooks and attach results. The live test must remain skipped in the default suite.
-   - Expected result: Debug and Release builds succeed and the unit suite passes. CLI checks alone do not verify application packaging or the full XCTest suite.
-   - Release restriction: do not release the implementation until these checks pass. On the current host, all three Xcode commands fail because `/Applications/Xcode.app/Contents/Developer` is absent.
-
-2. **Live display behavior and latency**
+1. **Live display behavior and latency**
    - Responsible role: maintainer who can safely change the host's display configuration.
    - Prerequisite: a successful full build, a recoverable test setup, and explicit approval for display changes.
-   - Action: run `just test-live`; check multiple displays, rapid source changes, disconnect/reconnect during pending work, source reconnection, and sleep/wake. Capture a main-thread trace during mirror changes. Use macOS 14 and a current supported macOS version where available, and record missing OS/device coverage.
+   - Action: after explicit approval, run `just test-live`; check multiple displays, a virtual display used as a mirror primary, rapid source changes, disconnect/reconnect during pending work, source reconnection, and sleep/wake. Capture a main-thread trace during mirror changes. Use macOS 14 and a current supported macOS version where available, and record missing OS/device coverage.
    - Expected result: saved mirror intent and recovery remain correct, stale operations do not change the final selection, and mirror transactions do not occupy the main thread.
    - Unverified behavior: private API compatibility, real display recovery, menu responsiveness, and system latency have not been established by test doubles.
    - Release restriction: observed safety or recovery failures block release. Do not claim measured latency gains or complete live-display validation without this evidence.
+
+2. **Real release validation**
+   - Responsible role: release operator with configured Developer ID and notarization credentials.
+   - Prerequisite: a separately approved release and successful build and display-safe checks for the release revision.
+   - Action: run the signing, notarization, Gatekeeper, and publication steps through the documented workflow or local release process.
+   - Expected result: a signed and notarized universal app, a tag at its recorded source commit, and a public release with exactly the ZIP and checksum assets.
+   - Release restriction: real signing, notarization, and workflow execution were not tested in this work. Unsigned builds and mocked release checks do not establish release readiness.
 
 ## Release tooling checks
 
@@ -178,7 +189,12 @@ With the pinned changenote CLI, XcodeGen, and uv installed, run:
 just test-release
 ```
 
-These checks use temporary files and mocked Git and GitHub commands. They verify version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards. They do not sign apps, change displays, or create remote tags or Releases.
+The recipe runs both release test suites:
+
+- `scripts/test-changenote.py` verifies version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards with temporary files and mocked Git and GitHub commands.
+- `scripts/tests/test_release.py` runs copies of the actual release scripts and the workflow certificate import and cleanup shell blocks. All external commands in this suite are mocked. It covers matching and stale commits, missing or empty provenance, checksum mismatch, source changes during packaging, and cleanup after import or identity validation failure. Rejected publication checks verify that no tag, push, or GitHub Release write is attempted. The suite also checks shell syntax for both scripts and every workflow shell step.
+
+These checks do not sign apps, change keychains or displays, or create remote tags or Releases. The real GitHub workflow is not tested in this work. A release operator must validate signing, notarization, and publication with configured credentials during a separately approved release.
 
 ## Recovery
 

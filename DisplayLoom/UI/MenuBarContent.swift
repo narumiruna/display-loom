@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import SwiftUI
 
 struct MenuBarContent: View {
@@ -51,53 +52,69 @@ struct MenuBarContent: View {
   @ViewBuilder
   private func profileMenu(_ profile: VirtualDisplayProfile) -> some View {
     let state = store.state(for: profile.id)
-    Menu {
-      statusMessage(for: state)
+    Menu(
+      content: {
+        statusMessage(for: state)
 
-      if state.isConnected || state.isBusy {
-        Button {
-          Task { await store.disconnectProfile(id: profile.id) }
-        } label: {
-          Label("menu.disconnect", systemImage: "stop.circle")
+        if state.isConnected || state.isBusy {
+          Button(
+            action: {
+              Task { await store.disconnectProfile(id: profile.id) }
+            },
+            label: {
+              Label("menu.disconnect", systemImage: "stop.circle")
+            }
+          )
+          .disabled(state.isBusy)
+        } else {
+          Button(
+            action: {
+              Task {
+                await store.connectProfile(id: profile.id)
+                presentStoreErrorIfNeeded()
+              }
+            },
+            label: {
+              Label("menu.connect", systemImage: "play.circle")
+            }
+          )
         }
-        .disabled(state.isBusy)
-      } else {
-        Button {
-          Task {
-            await store.connectProfile(id: profile.id)
-            presentStoreErrorIfNeeded()
+
+        mirrorMenu(for: profile, state: state)
+        resolutionMenu(for: profile, state: state)
+
+        Divider()
+
+        Button(
+          action: {
+            guard let name = DialogPresenter.requestName(currentName: profile.name) else { return }
+            Task {
+              await store.renameProfile(id: profile.id, to: name)
+              presentStoreErrorIfNeeded()
+            }
+          },
+          label: {
+            Label("menu.rename", systemImage: "pencil")
           }
-        } label: {
-          Label("menu.connect", systemImage: "play.circle")
-        }
+        )
+        .disabled(state.isBusy)
+
+        Button(
+          role: .destructive,
+          action: {
+            guard DialogPresenter.confirmRemoval(name: profile.name) else { return }
+            Task { await store.removeProfile(id: profile.id) }
+          },
+          label: {
+            Label("menu.remove", systemImage: "trash")
+          }
+        )
+        .disabled(state.isBusy)
+      },
+      label: {
+        Label(profile.name, systemImage: statusSymbol(for: state))
       }
-
-      mirrorMenu(for: profile, state: state)
-      resolutionMenu(for: profile, state: state)
-
-      Divider()
-
-      Button {
-        guard let name = DialogPresenter.requestName(currentName: profile.name) else { return }
-        Task {
-          await store.renameProfile(id: profile.id, to: name)
-          presentStoreErrorIfNeeded()
-        }
-      } label: {
-        Label("menu.rename", systemImage: "pencil")
-      }
-      .disabled(state.isBusy)
-
-      Button(role: .destructive) {
-        guard DialogPresenter.confirmRemoval(name: profile.name) else { return }
-        Task { await store.removeProfile(id: profile.id) }
-      } label: {
-        Label("menu.remove", systemImage: "trash")
-      }
-      .disabled(state.isBusy)
-    } label: {
-      Label(profile.name, systemImage: statusSymbol(for: state))
-    }
+    )
   }
 
   private func mirrorMenu(
@@ -111,52 +128,61 @@ struct MenuBarContent: View {
         !store.mirrorSources.contains(where: { $0.id == selectedSourceID })
       } ?? false
 
-    return Menu {
-      Button {
-        Task {
-          await store.setMirrorSource(nil, for: profile.id)
-          presentStoreErrorIfNeeded()
-        }
-      } label: {
-        if activeSourceID == nil {
-          Label("menu.mirrorNone", systemImage: "checkmark")
-        } else {
-          Text("menu.mirrorNone")
-        }
-      }
-
-      if restoreFailed || selectedSourceUnavailable {
-        Divider()
-        if restoreFailed {
-          Label("menu.mirrorRestoreFailed", systemImage: "exclamationmark.triangle")
-            .disabled(true)
-        }
-        if selectedSourceUnavailable {
-          Label("menu.mirrorSourceUnavailable", systemImage: "exclamationmark.triangle")
-            .disabled(true)
-        }
-      }
-
-      if !store.mirrorSources.isEmpty {
-        Divider()
-        ForEach(store.mirrorSources) { source in
-          Button {
+    return Menu(
+      content: {
+        Button(
+          action: {
             Task {
-              await store.setMirrorSource(source.id, for: profile.id)
+              await store.setMirrorSource(nil, for: profile.id)
               presentStoreErrorIfNeeded()
             }
-          } label: {
-            if activeSourceID == source.id {
-              Label(source.name, systemImage: "checkmark")
+          },
+          label: {
+            if activeSourceID == nil {
+              Label("menu.mirrorNone", systemImage: "checkmark")
             } else {
-              Text(source.name)
+              Text("menu.mirrorNone")
             }
           }
+        )
+
+        if restoreFailed || selectedSourceUnavailable {
+          Divider()
+          if restoreFailed {
+            Label("menu.mirrorRestoreFailed", systemImage: "exclamationmark.triangle")
+              .disabled(true)
+          }
+          if selectedSourceUnavailable {
+            Label("menu.mirrorSourceUnavailable", systemImage: "exclamationmark.triangle")
+              .disabled(true)
+          }
         }
+
+        if !store.mirrorSources.isEmpty {
+          Divider()
+          ForEach(store.mirrorSources) { source in
+            Button(
+              action: {
+                Task {
+                  await store.setMirrorSource(source.id, for: profile.id)
+                  presentStoreErrorIfNeeded()
+                }
+              },
+              label: {
+                if activeSourceID == source.id {
+                  Label(source.name, systemImage: "checkmark")
+                } else {
+                  Text(source.name)
+                }
+              }
+            )
+          }
+        }
+      },
+      label: {
+        Text("menu.mirrorDisplay")
       }
-    } label: {
-      Text("menu.mirrorDisplay")
-    }
+    )
     .disabled(!state.isConnected || state.isBusy)
   }
 
@@ -164,59 +190,71 @@ struct MenuBarContent: View {
     for profile: VirtualDisplayProfile,
     state: DisplayConnectionState
   ) -> some View {
-    Menu {
-      ForEach(DisplayAspectRatio.allCases) { aspectRatio in
-        Menu(aspectRatio.localizedName) {
-          ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
-            Button {
-              selectResolution(preset, for: profile.id)
-            } label: {
-              if profile.resolutionID == preset.id {
-                Label(preset.displayName, systemImage: "checkmark")
-              } else {
-                Text(preset.displayName)
-              }
+    Menu(
+      content: {
+        ForEach(DisplayAspectRatio.allCases) { aspectRatio in
+          Menu(aspectRatio.localizedName) {
+            ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
+              Button(
+                action: {
+                  selectResolution(preset, for: profile.id)
+                },
+                label: {
+                  if profile.resolutionID == preset.id {
+                    Label(preset.displayName, systemImage: "checkmark")
+                  } else {
+                    Text(preset.displayName)
+                  }
+                }
+              )
             }
           }
         }
-      }
-    } label: {
-      if store.isMirroring(profileID: profile.id) {
-        Text("menu.resolutionControlledByMirror")
-      } else {
-        Text(
-          String(
-            format: String(localized: "menu.resolutionCurrent", defaultValue: "Resolution: %@"),
-            profile.resolution?.displayName ?? profile.resolutionID
+      },
+      label: {
+        if store.isMirroring(profileID: profile.id) {
+          Text("menu.resolutionControlledByMirror")
+        } else {
+          Text(
+            String(
+              format: String(localized: "menu.resolutionCurrent", defaultValue: "Resolution: %@"),
+              profile.resolution?.displayName ?? profile.resolutionID
+            )
           )
-        )
+        }
       }
-    }
+    )
     .disabled(state.isBusy || store.isMirroring(profileID: profile.id))
   }
 
   @ViewBuilder
   private var addDisplayControls: some View {
-    Button {
-      addDisplay(Self.recommendedResolution)
-    } label: {
-      Label("menu.addDisplay", systemImage: "plus")
-    }
+    Button(
+      action: {
+        addDisplay(Self.recommendedResolution)
+      },
+      label: {
+        Label("menu.addDisplay", systemImage: "plus")
+      }
+    )
     .disabled(!store.backendAvailability.isAvailable)
 
-    Menu {
-      ForEach(DisplayAspectRatio.allCases) { aspectRatio in
-        Menu(aspectRatio.localizedName) {
-          ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
-            Button(preset.displayName) {
-              addDisplay(preset)
+    Menu(
+      content: {
+        ForEach(DisplayAspectRatio.allCases) { aspectRatio in
+          Menu(aspectRatio.localizedName) {
+            ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
+              Button(preset.displayName) {
+                addDisplay(preset)
+              }
             }
           }
         }
+      },
+      label: {
+        Label("menu.addDisplayWithResolution", systemImage: "slider.horizontal.3")
       }
-    } label: {
-      Label("menu.addDisplayWithResolution", systemImage: "slider.horizontal.3")
-    }
+    )
     .disabled(!store.backendAvailability.isAvailable)
   }
 

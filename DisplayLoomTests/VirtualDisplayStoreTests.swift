@@ -103,9 +103,15 @@ final class VirtualDisplayStoreTests: XCTestCase {
 
   func testStartRestoresOnlyDesiredConnections() async {
     let desired = VirtualDisplayProfile(
-      name: "Desired", resolutionID: "1920x1080", desiredConnected: true)
+      name: "Desired",
+      resolutionID: "1920x1080",
+      desiredConnected: true
+    )
     let disabled = VirtualDisplayProfile(
-      name: "Disabled", resolutionID: "1920x1200", desiredConnected: false)
+      name: "Disabled",
+      resolutionID: "1920x1200",
+      desiredConnected: false
+    )
     let environment = VirtualDisplayTestEnvironment(
       state: PersistedState(
         profiles: [desired, disabled],
@@ -183,7 +189,8 @@ final class VirtualDisplayStoreTests: XCTestCase {
     XCTAssertEqual(environment.store.takeLastErrorMessage(), connectionError.localizedDescription)
     XCTAssertEqual(
       environment.store.state(for: profile.id),
-      .failed(message: connectionError.localizedDescription))
+      .failed(message: connectionError.localizedDescription)
+    )
     XCTAssertTrue(environment.repository.state.profiles[0].desiredConnected)
 
     environment.backend.connectError = nil
@@ -193,7 +200,9 @@ final class VirtualDisplayStoreTests: XCTestCase {
     let savedState = environment.repository.state
 
     await environment.store.setResolution(
-      ResolutionPreset.preset(withID: "2560x1440")!, for: profile.id)
+      ResolutionPreset.preset(withID: "2560x1440")!,
+      for: profile.id
+    )
 
     XCTAssertEqual(environment.store.takeLastErrorMessage(), resolutionError.localizedDescription)
     XCTAssertEqual(environment.repository.state, savedState)

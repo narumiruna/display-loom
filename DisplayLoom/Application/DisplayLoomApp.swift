@@ -17,12 +17,15 @@ struct DisplayLoomApp: App {
   }
 
   var body: some Scene {
-    MenuBarExtra {
-      MenuBarContent(store: store)
-    } label: {
-      Label("Display Loom", systemImage: "display.2")
-        .labelStyle(.iconOnly)
-    }
+    MenuBarExtra(
+      content: {
+        MenuBarContent(store: store)
+      },
+      label: {
+        Label("Display Loom", systemImage: "display.2")
+          .labelStyle(.iconOnly)
+      }
+    )
     .menuBarExtraStyle(.menu)
   }
 }

@@ -22,6 +22,7 @@ struct ResolutionPreset: Codable, Hashable, Identifiable, Sendable {
   let aspectRatio: DisplayAspectRatio
 
   var id: String { "\(width)x\(height)" }
+
   var is8K: Bool { width >= 7_680 }
 
   var displayName: String {
@@ -68,6 +69,7 @@ struct ResolutionPreset: Codable, Hashable, Identifiable, Sendable {
   ]
 
   static var maximumWidth: Int { catalog.map(\.width).max() ?? 0 }
+
   static var maximumHeight: Int { catalog.map(\.height).max() ?? 0 }
 
   static func presets(for aspectRatio: DisplayAspectRatio) -> [ResolutionPreset] {

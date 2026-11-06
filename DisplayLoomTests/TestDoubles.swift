@@ -102,7 +102,8 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
       ?? Dictionary(
         uniqueKeysWithValues: sources.enumerated().map {
           (CGDirectDisplayID(10_000 + $0.offset), $0.element.id)
-        })
+        }
+      )
   }
 
   func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) async throws {

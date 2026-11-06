@@ -129,6 +129,7 @@ class ChangenoteTests(unittest.TestCase):
         log = shlex.quote(str(self.root / "remote-writes.log"))
         arguments = shlex.quote(str(self.root / "release-arguments.txt"))
         commit = "1" * 40
+        artifact.with_suffix(".zip.commit").write_text(f"{commit}\n")
         git = commands / "git"
         git.write_text(f"""#!/usr/bin/env bash
 set -euo pipefail
