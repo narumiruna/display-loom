@@ -18,6 +18,14 @@ Baseline: `a7d259d` on `main`. Source line references and probe results below ap
 
 The current host has Command Line Tools and a working Swift compiler, but no full Xcode installation. `just test` fails because `/Applications/Xcode.app/Contents/Developer` is absent. The probes did not create or reconfigure a real display. Preserve their cases as repository tests; do not depend on temporary probe files.
 
+Implementation evidence (2026-11-06):
+
+- `just test-performance` passes 27 shared check functions against production sources and the real bridge: 14 backend/worker checks and 13 store/service groups. Three consecutive complete runs passed. The F1 result is one scan, zero restore calls, and zero publications for the original 100-event/four-profile case.
+- Native arm64 compilation and Intel x86_64 type-checking/syntax checks pass for macOS 14 with warnings treated as errors. Test-source parsing and Xcode project validation pass; existing project settings and IDs are unchanged.
+- All applicable pre-commit hooks pass with the available Command Line Tools toolchain supplied through `TOOLCHAIN_DIR` and its `usr/bin` on `PATH`. Full Xcode commands still fail for the documented missing developer directory; they are external checks, not passed gates.
+- Source reviews covered correctness, security, lifecycle, compatibility, regressions, and scope. Review fixes now have gated checks for reconnect cleanup, superseded creation, in-flight recovery budgets, attempted-state snapshots, and successive mode success/failure ordering. No material source-review findings remain.
+- Unresolved full-Xcode and live-display items, responsible roles, and release restrictions are retained in `docs/RELEASING.md` under Performance change validation.
+
 ## Architecture
 
 - Keep `VirtualDisplayStore`, `NSScreen` access, and published state on `MainActor`.
@@ -37,32 +45,32 @@ The current host has Command Line Tools and a working Swift compiler, but no ful
 
 Complete these tasks in order. Use controlled gates, fake clocks, and injected operations for deterministic checks; do not use real display changes in default tests.
 
-- [ ] Establish regression fixtures for F1-F3 in `DisplayLoomTests/TestDoubles.swift` and the store, coordination, backend, and mirroring test files. Reproduce the notification counts and delayed operations before changing production behavior.
+- [x] Establish regression fixtures for F1-F3 in `DisplayLoomTests/TestDoubles.swift` and the store, coordination, backend, and mirroring test files. Reproduce the notification counts and delayed operations before changing production behavior.
   - Evidence: isolated Swift CLI probes execute the same cases against production sources and reproduce the F1 baseline. Worker gates reproduce queued-operation blocking without a real display. Document the internal worker and handle ownership before changing asynchronous behavior; check available SDK threading constraints and record unsupported-platform questions in the handoff.
 
-- [ ] Remove blocking registration polling from the bridge/backend path and use the serial worker for handle writes. Create the handle, schedule each registration check, and set the initial mode only after registration.
+- [x] Remove blocking registration polling from the bridge/backend path and use the serial worker for handle writes. Create the handle, schedule each registration check, and set the initial mode only after registration.
   - Preserve the current two-second deadline and 50 ms probe interval. Use a monotonic deadline rather than extending the deadline after each scheduled check.
   - Serialize invalidation with mode writes. Clean up failed, cancelled, or superseded creations, and complete each request exactly once.
   - Evidence: a gated pending registration does not prevent another connected display's resolution operation from completing. Deterministic checks cover registration success, timeout, invalidation, cancellation, and late completion. No registration loop sleeps on an occupied worker.
 
-- [ ] Move mirror transactions to the serial worker and propagate `async throws` through `DisplayMirroringManaging`, `VirtualDisplayStore`, menu actions, cleanup paths, and affected tests.
+- [x] Move mirror transactions to the serial worker and propagate `async throws` through `DisplayMirroringManaging`, `VirtualDisplayStore`, menu actions, cleanup paths, and affected tests.
   - Preserve successful-selection persistence and actual-state reporting after failure. Coordinate explicit selection, automatic restoration, resolution changes, disconnect, removal, rename, and termination without overlapping writes to the same target.
   - Evidence: a gated mirror transaction leaves the main actor available to another task. Late results cannot restore a removed connection, overwrite a newer source choice, or access an obsolete profile index. Gated mirror/resolution overlap tests prove that pending mirroring rejects resolution changes and worker-side revalidation prevents a mirrored target's mode write. Existing mirror coordination cases retain their behavior except for the explicit retry distinction in the next task.
 
-- [ ] Merge screen notifications and publish only changed snapshots in `VirtualDisplayStore`. Check actual mirror state before a restore write and suppress retries for an unchanged failed restore as defined above.
+- [x] Merge screen notifications and publish only changed snapshots in `VirtualDisplayStore`. Check actual mirror state before a restore write and suppress retries for an unchanged failed restore as defined above.
   - Preserve the final screen state when notifications arrive during a suspended restore. Cancel pending scheduled updates when the store is released. Update `testRestoreFailureExposesActualStateAndClearsAfterRetry` to retry through explicit selection of the saved source; an unchanged notification must no longer reset the failure budget.
   - Evidence: after initial state settles, 100 queued notifications with four unchanged profiles cause one source scan, no restore calls to `setMirror`, and no `objectWillChange` notifications. Events during a pass merge into one pending update; a later relevant state change is not lost. A failed restore that emits queued notifications makes only one automatic attempt for that unchanged snapshot; explicit retry, wake recovery, and source reconnection still work. Weak-reference checks prove store release both before a scheduled pass and during a gated worker operation, with no later publication or follow-up pass.
 
-- [ ] Validate the combined changes with isolated Swift CLI probes and compile the changed Swift and Objective-C paths with Command Line Tools. Prepare the external test handoff with exact commands, baseline/updated counts, and known limits.
+- [x] Validate the combined changes with isolated Swift CLI probes and compile the changed Swift and Objective-C paths with Command Line Tools. Prepare the external test handoff with exact commands, baseline/updated counts, and known limits.
   - Evidence: deterministic checks for F1-F3 pass without creating a display; error mapping, saved intent, stale-result rejection, and cleanup checks pass. Record the commands and distinguish executed probes from unexecuted XCTest cases. Keep change-caused failures and unresolved ownership questions blocking.
 
 ## Completion Checklist
 
-- [ ] F1 regression evidence shows merged updates, no unchanged-state publications, and bounded failure feedback without losing later valid updates.
-- [ ] F2 regression evidence shows that registration waits yield the worker and preserve deadlines, cleanup, and error mapping.
-- [ ] F3 regression evidence shows that mirror transactions yield the main actor and cannot apply stale results to store state.
-- [ ] Available compilation and deterministic checks pass, and the diff contains no unrelated behavior or persistence changes.
-- [ ] External handoff instructions and restrictions are recorded. Before deleting this completed plan, move unresolved handoff items to `docs/RELEASING.md`. Plan completion alone does not establish release readiness.
+- [x] F1 regression evidence shows merged updates, no unchanged-state publications, and bounded failure feedback without losing later valid updates.
+- [x] F2 regression evidence shows that registration waits yield the worker and preserve deadlines, cleanup, and error mapping.
+- [x] F3 regression evidence shows that mirror transactions yield the main actor and cannot apply stale results to store state.
+- [x] Available compilation and deterministic checks pass, and the diff contains no unrelated behavior or persistence changes.
+- [x] External handoff instructions and restrictions are recorded. Before deleting this completed plan, move unresolved handoff items to `docs/RELEASING.md`. Plan completion alone does not establish release readiness.
 
 ## External Handoff
 

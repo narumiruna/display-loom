@@ -60,7 +60,7 @@ final class VirtualDisplayStorePersistenceTests: XCTestCase {
 
     XCTAssertEqual(environment.repository.state.profiles, [first, second])
     XCTAssertEqual(publishedProfiles.last, [first, second])
-    environment.store.removeProfile(id: first.id)
+    await environment.store.removeProfile(id: first.id)
     XCTAssertEqual(publishedProfiles.last, [second])
     XCTAssertEqual(publishedProfiles.count, 4)
     XCTAssertEqual(environment.repository.savedStates.count, 3)

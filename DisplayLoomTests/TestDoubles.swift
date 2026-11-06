@@ -48,6 +48,7 @@ final class FakeLaunchAtLoginManager: LaunchAtLoginManaging {
 final class FakeDisplayConnection: VirtualDisplayConnection {
   let displayID: CGDirectDisplayID
   private(set) var invalidated = false
+  var onInvalidate: (() -> Void)?
 
   init(displayID: CGDirectDisplayID) {
     self.displayID = displayID
@@ -56,7 +57,9 @@ final class FakeDisplayConnection: VirtualDisplayConnection {
   var isValid: Bool { !invalidated }
 
   func invalidate() {
+    guard !invalidated else { return }
     invalidated = true
+    onInvalidate?()
   }
 }
 
@@ -70,8 +73,11 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
   var sources: [DisplayMirrorSource] = []
   var availableSourcesError: Error?
   var setMirrorError: Error?
+  var afterMirrorError: Error?
   var onMirrorAttempt: (() -> Void)?
   var onMirrorChange: (() -> Void)?
+  var beforeMirror: (() async -> Void)?
+  var onlineIdentities: [CGDirectDisplayID: UUID]?
 
   private(set) var excludedDisplayIDSets: [Set<CGDirectDisplayID>] = []
   private(set) var mirrorAttempts: [MirrorRequest] = []
@@ -90,9 +96,19 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
     actualSourceIDs[targetDisplayID]
   }
 
-  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) throws {
+  func onlineDisplayIdentities() throws -> [CGDirectDisplayID: UUID] {
+    if let availableSourcesError { throw availableSourcesError }
+    return onlineIdentities
+      ?? Dictionary(
+        uniqueKeysWithValues: sources.enumerated().map {
+          (CGDirectDisplayID(10_000 + $0.offset), $0.element.id)
+        })
+  }
+
+  func setMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) async throws {
     mirrorAttempts.append(MirrorRequest(targetDisplayID: targetDisplayID, sourceID: sourceID))
     onMirrorAttempt?()
+    await beforeMirror?()
     if let setMirrorError { throw setMirrorError }
     guard actualSourceIDs[targetDisplayID] != sourceID else { return }
 
@@ -103,6 +119,7 @@ final class FakeDisplayMirroringManager: DisplayMirroringManaging {
       actualSourceIDs[targetDisplayID] = nil
     }
     onMirrorChange?()
+    if let afterMirrorError { throw afterMirrorError }
   }
 
   func simulateActualMirror(targetDisplayID: CGDirectDisplayID, sourceID: UUID?) {
@@ -118,9 +135,14 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   var availability: VirtualDisplayBackendAvailability = .available
   var connectError: VirtualDisplayBackendError?
   var setResolutionError: VirtualDisplayBackendError?
+  var resolutionErrors: [String: VirtualDisplayBackendError] = [:]
+  var beforeConnect: ((VirtualDisplayProfile) async -> Void)?
+  var beforeResolution: (() async -> Void)?
 
+  private(set) var createdConnections: [FakeDisplayConnection] = []
   private(set) var connectRequests: [(VirtualDisplayProfile, ResolutionPreset)] = []
   private(set) var resolutionRequests: [(String, CGDirectDisplayID)] = []
+  private(set) var appliedResolutionIDs: [CGDirectDisplayID: String] = [:]
   private(set) var connections: [UUID: FakeDisplayConnection] = [:]
   private var terminationHandlers: [UUID: () -> Void] = [:]
   private var nextDisplayID: CGDirectDisplayID = 100
@@ -131,10 +153,13 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
     terminationHandler: @escaping () -> Void
   ) async throws -> any VirtualDisplayConnection {
     connectRequests.append((profile, resolution))
+    await beforeConnect?(profile)
     if let connectError { throw connectError }
     nextDisplayID += 1
     let connection = FakeDisplayConnection(displayID: nextDisplayID)
+    createdConnections.append(connection)
     connections[profile.id] = connection
+    appliedResolutionIDs[connection.displayID] = resolution.id
     terminationHandlers[profile.id] = terminationHandler
     return connection
   }
@@ -143,8 +168,11 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
     _ resolution: ResolutionPreset,
     for connection: any VirtualDisplayConnection
   ) async throws {
-    if let setResolutionError { throw setResolutionError }
+    await beforeResolution?()
+    if let error = resolutionErrors[resolution.id] ?? setResolutionError { throw error }
+    guard connection.isValid else { throw VirtualDisplayBackendError.invalidated }
     resolutionRequests.append((resolution.id, connection.displayID))
+    appliedResolutionIDs[connection.displayID] = resolution.id
   }
 
   func terminate(profileID: UUID) {

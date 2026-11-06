@@ -45,7 +45,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
     let profileID = environment.store.profiles[0].id
     let firstConnection = environment.backend.connections[profileID]!
 
-    environment.store.disconnectProfile(id: profileID)
+    await environment.store.disconnectProfile(id: profileID)
     XCTAssertTrue(firstConnection.invalidated)
     XCTAssertEqual(environment.store.state(for: profileID), .disconnected)
     XCTAssertFalse(environment.store.profile(id: profileID)!.desiredConnected)
@@ -60,7 +60,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
     XCTAssertEqual(environment.backend.connectRequests.last?.0.name, "Studio")
 
     let latestConnection = environment.backend.connections[profileID]!
-    environment.store.removeProfile(id: profileID)
+    await environment.store.removeProfile(id: profileID)
     XCTAssertTrue(latestConnection.invalidated)
     XCTAssertTrue(environment.store.profiles.isEmpty)
     XCTAssertTrue(environment.repository.state.profiles.isEmpty)
@@ -89,7 +89,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
     let environment = VirtualDisplayTestEnvironment()
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
-    environment.store.disconnectProfile(id: profileID)
+    await environment.store.disconnectProfile(id: profileID)
 
     await environment.store.setResolution(
       ResolutionPreset.preset(withID: "2560x1440")!,
@@ -125,10 +125,14 @@ final class VirtualDisplayStoreTests: XCTestCase {
     let environment = VirtualDisplayTestEnvironment()
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
+    let connection = environment.backend.connections[profileID]!
+    let terminated = expectation(description: "Terminated connection is invalidated")
+    connection.onInvalidate = { terminated.fulfill() }
+    defer { connection.onInvalidate = nil }
 
     environment.backend.terminate(profileID: profileID)
-    await Task.yield()
-    await Task.yield()
+    await fulfillment(of: [terminated], timeout: 2)
+    await environment.store.waitForDisplayUpdates()
 
     guard case .failed = environment.store.state(for: profileID) else {
       return XCTFail("Expected a failed state after termination")

@@ -34,9 +34,15 @@ typedef void (^VSCGVirtualDisplayTerminationHandler)(void);
 @interface VSCGVirtualDisplayHandle : NSObject
 
 @property(class, nonatomic, readonly, getter=isAPIAvailable) BOOL APIAvailable;
+// Stable for the lifetime of this handle, including after invalidation.
 @property(nonatomic, readonly) CGDirectDisplayID displayID;
+// These reads are safe from the main thread during worker operations.
 @property(nonatomic, readonly, getter=isValid) BOOL valid;
+@property(nonatomic, readonly, getter=isInvalidated) BOOL invalidated;
 
+// Returns a pending handle without waiting for registration or selecting a mode.
+// The caller owns it until registration succeeds or invalidate is called.
+// Create, mode writes, and invalidation must use the shared serial display worker.
 + (nullable instancetype)createWithName:(NSString *)name
                               vendorID:(uint32_t)vendorID
                              productID:(uint32_t)productID
