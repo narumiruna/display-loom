@@ -35,6 +35,10 @@ test:
       CODE_SIGNING_ALLOWED=NO \
       test
 
+# Compile production code and run display-safe regression checks with Command Line Tools.
+test-performance:
+    ./scripts/check-performance.sh
+
 # Run the opt-in test that creates and switches a real virtual display.
 test-live:
     DEVELOPER_DIR="{{developer_dir}}" xcodebuild \

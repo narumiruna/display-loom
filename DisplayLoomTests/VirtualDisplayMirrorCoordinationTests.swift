@@ -14,15 +14,16 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let firstTarget = environment.backend.connections[first.id]!.displayID
     let secondTarget = environment.backend.connections[second.id]!.displayID
     environment.mirroringManager.sources = [source]
-    environment.store.setMirrorSource(source.id, for: first.id)
+    await environment.store.setMirrorSource(source.id, for: first.id)
     environment.mirroringManager.onMirrorChange = {
       environment.mirroringManager.onMirrorChange = nil
       environment.mirroringManager.simulateActualMirror(targetDisplayID: firstTarget, sourceID: nil)
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
     defer { environment.mirroringManager.onMirrorChange = nil }
 
-    environment.store.setMirrorSource(source.id, for: second.id)
+    await environment.store.setMirrorSource(source.id, for: second.id)
+    await environment.store.waitForDisplayUpdates()
 
     XCTAssertEqual(
       environment.mirroringManager.mirrorRequests.suffix(2),
@@ -43,14 +44,15 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let profile = environment.store.profiles[0]
     let target = environment.backend.connections[profile.id]!.displayID
     environment.mirroringManager.sources = [source]
-    environment.store.setMirrorSource(source.id, for: profile.id)
+    await environment.store.setMirrorSource(source.id, for: profile.id)
     environment.mirroringManager.onMirrorChange = {
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
     defer { environment.mirroringManager.onMirrorChange = nil }
     let attemptsBeforeClearing = environment.mirroringManager.mirrorAttempts.count
 
-    environment.store.setMirrorSource(nil, for: profile.id)
+    await environment.store.setMirrorSource(nil, for: profile.id)
+    await environment.store.waitForDisplayUpdates()
 
     XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeClearing + 1)
     XCTAssertNil(environment.mirroringManager.mirrorSourceID(for: target))
@@ -66,8 +68,8 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let firstTarget = environment.backend.connections[first.id]!.displayID
     let secondTarget = environment.backend.connections[second.id]!.displayID
     environment.mirroringManager.sources = [source]
-    environment.store.setMirrorSource(source.id, for: first.id)
-    environment.store.setMirrorSource(source.id, for: second.id)
+    await environment.store.setMirrorSource(source.id, for: first.id)
+    await environment.store.setMirrorSource(source.id, for: second.id)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: firstTarget, sourceID: nil)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: secondTarget, sourceID: nil)
     environment.mirroringManager.onMirrorChange = {
@@ -76,16 +78,25 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
         environment.mirroringManager.simulateActualMirror(
           targetDisplayID: firstTarget, sourceID: nil)
       }
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
     defer { environment.mirroringManager.onMirrorChange = nil }
     let attemptsBeforeRestoring = environment.mirroringManager.mirrorAttempts.count
     let savedState = environment.repository.state
 
-    environment.store.handleDisplayReconfiguration()
+    await environment.store.handleDisplayReconfiguration()
 
-    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 4)
+    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 3)
+    XCTAssertEqual(
+      environment.mirroringManager.mirrorAttempts.suffix(3),
+      [
+        MirrorRequest(targetDisplayID: firstTarget, sourceID: source.id),
+        MirrorRequest(targetDisplayID: secondTarget, sourceID: source.id),
+        MirrorRequest(targetDisplayID: firstTarget, sourceID: source.id),
+      ]
+    )
     XCTAssertEqual(environment.mirroringManager.mirrorSourceID(for: firstTarget), source.id)
+    XCTAssertEqual(environment.mirroringManager.mirrorSourceID(for: secondTarget), source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[first.id], source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[second.id], source.id)
     XCTAssertEqual(environment.repository.state, savedState)
@@ -100,19 +111,19 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let secondTarget = environment.backend.connections[second.id]!.displayID
     let otherSource = DisplayMirrorSource(id: UUID(), name: "External Display")
     environment.mirroringManager.sources = [source, otherSource]
-    environment.store.setMirrorSource(source.id, for: first.id)
-    environment.store.setMirrorSource(otherSource.id, for: second.id)
+    await environment.store.setMirrorSource(source.id, for: first.id)
+    await environment.store.setMirrorSource(otherSource.id, for: second.id)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: firstTarget, sourceID: nil)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: secondTarget, sourceID: nil)
     environment.mirroringManager.sources = [otherSource]
     environment.mirroringManager.onMirrorChange = { [source] in
       environment.mirroringManager.onMirrorChange = nil
       environment.mirroringManager.sources = [source, otherSource]
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
     defer { environment.mirroringManager.onMirrorChange = nil }
 
-    environment.store.handleDisplayReconfiguration()
+    await environment.store.handleDisplayReconfiguration()
 
     XCTAssertEqual(environment.store.mirrorSources, [source, otherSource])
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[first.id], source.id)
@@ -127,26 +138,36 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let profile = environment.store.profiles[0]
     let target = environment.backend.connections[profile.id]!.displayID
     environment.mirroringManager.sources = [source]
-    environment.store.setMirrorSource(source.id, for: profile.id)
+    await environment.store.setMirrorSource(source.id, for: profile.id)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: target, sourceID: nil)
     let error = DisplayMirroringError.configurationFailed(1)
     environment.mirroringManager.setMirrorError = error
     environment.mirroringManager.onMirrorAttempt = {
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
     defer { environment.mirroringManager.onMirrorAttempt = nil }
     let attemptsBeforeRestoring = environment.mirroringManager.mirrorAttempts.count
 
-    environment.store.handleDisplayReconfiguration()
+    await environment.store.handleDisplayReconfiguration()
 
-    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 2)
+    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 1)
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
     XCTAssertTrue(environment.store.hasMirrorRestoreFailure(profileID: profile.id))
     XCTAssertNil(environment.store.takeLastErrorMessage())
 
-    environment.store.setMirrorSource(UUID(), for: profile.id)
+    let rejectedSourceID = UUID()
+    await environment.store.setMirrorSource(rejectedSourceID, for: profile.id)
+    await environment.store.waitForDisplayUpdates()
 
-    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 5)
+    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 3)
+    XCTAssertEqual(
+      environment.mirroringManager.mirrorAttempts.suffix(3),
+      [
+        MirrorRequest(targetDisplayID: target, sourceID: source.id),
+        MirrorRequest(targetDisplayID: target, sourceID: rejectedSourceID),
+        MirrorRequest(targetDisplayID: target, sourceID: source.id),
+      ]
+    )
     XCTAssertEqual(environment.store.takeLastErrorMessage(), error.localizedDescription)
     XCTAssertEqual(environment.repository.state.profiles[0].mirrorSourceID, source.id)
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
@@ -158,7 +179,7 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     let profile = environment.store.profiles[0]
     let target = environment.backend.connections[profile.id]!.displayID
     environment.mirroringManager.sources = [source]
-    environment.store.setMirrorSource(source.id, for: profile.id)
+    await environment.store.setMirrorSource(source.id, for: profile.id)
     environment.mirroringManager.simulateActualMirror(targetDisplayID: target, sourceID: nil)
     let restored = expectation(description: "Queued screen notification restores mirroring")
     environment.mirroringManager.onMirrorChange = { restored.fulfill() }
@@ -167,6 +188,7 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     NotificationCenter.default.post(
       name: NSApplication.didChangeScreenParametersNotification, object: nil)
     await fulfillment(of: [restored], timeout: 2)
+    await environment.store.waitForDisplayUpdates()
 
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[profile.id], source.id)
     XCTAssertEqual(environment.repository.state.profiles[0].mirrorSourceID, source.id)

@@ -46,6 +46,8 @@ On first launch, the app attempts to enable **Launch at Login**; you can change 
 
 Display Loom remembers the source and attempts to restore mirroring after the virtual display reconnects, the app relaunches, the Mac wakes, or the source display reconnects.
 
+If automatic restoration fails, select the saved source again to retry. Repeated notifications for unchanged display state do not trigger repeated attempts.
+
 While mirroring, macOS controls the compatible display mode. Turn off mirroring before changing the virtual display's saved resolution.
 
 ## Supported resolutions
@@ -73,6 +75,14 @@ Run unit tests without creating a real virtual display:
 ```sh
 just test
 ```
+
+With macOS Command Line Tools, you can also run deterministic performance and lifecycle checks without full Xcode:
+
+```sh
+just test-performance
+```
+
+This compiles the production Swift and Objective-C code for macOS 14 and runs shared regression checks with test doubles. It does not create or reconfigure a real display. It does not replace the full app build or XCTest suite.
 
 The opt-in integration test creates a real virtual display, changes its resolution, and tests mirroring when a source display is available. Run it only when you are ready for changes to your display configuration:
 

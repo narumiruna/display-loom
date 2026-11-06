@@ -12,7 +12,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     let profileID = environment.store.profiles[0].id
     let targetDisplayID = environment.backend.connections[profileID]!.displayID
 
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
 
     XCTAssertEqual(environment.store.profile(id: profileID)?.mirrorSourceID, source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[profileID], source.id)
@@ -23,7 +23,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     XCTAssertEqual(environment.repository.state.profiles[0].mirrorSourceID, source.id)
 
     environment.mirroringManager.setMirrorError = DisplayMirroringError.configurationFailed(1)
-    environment.store.setMirrorSource(UUID(), for: profileID)
+    await environment.store.setMirrorSource(UUID(), for: profileID)
 
     XCTAssertEqual(environment.store.profile(id: profileID)?.mirrorSourceID, source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[profileID], source.id)
@@ -31,9 +31,11 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
 
     environment.mirroringManager.setMirrorError = nil
     environment.mirroringManager.onMirrorChange = {
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
-    environment.store.setMirrorSource(nil, for: profileID)
+    defer { environment.mirroringManager.onMirrorChange = nil }
+    await environment.store.setMirrorSource(nil, for: profileID)
+    await environment.store.waitForDisplayUpdates()
 
     XCTAssertNil(environment.store.profile(id: profileID)?.mirrorSourceID)
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profileID])
@@ -74,9 +76,17 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
     XCTAssertTrue(environment.store.hasMirrorRestoreFailure(profileID: profile.id))
 
+    let attemptsAfterFailure = environment.mirroringManager.mirrorAttempts.count
     environment.mirroringManager.setMirrorError = nil
-    environment.store.handleDisplayReconfiguration()
+    await environment.store.handleDisplayReconfiguration()
 
+    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsAfterFailure)
+    XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
+    XCTAssertTrue(environment.store.hasMirrorRestoreFailure(profileID: profile.id))
+
+    await environment.store.setMirrorSource(source.id, for: profile.id)
+
+    XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsAfterFailure + 1)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[profile.id], source.id)
     XCTAssertFalse(environment.store.hasMirrorRestoreFailure(profileID: profile.id))
   }
@@ -88,9 +98,9 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
     let firstTarget = environment.backend.connections[profileID]!.displayID
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
 
-    environment.store.disconnectProfile(id: profileID)
+    await environment.store.disconnectProfile(id: profileID)
     await environment.store.connectProfile(id: profileID)
 
     let secondTarget = environment.backend.connections[profileID]!.displayID
@@ -116,9 +126,10 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
 
     environment.mirroringManager.sources = [source]
     environment.mirroringManager.onMirrorChange = {
-      environment.store.handleDisplayReconfiguration()
+      environment.store.scheduleDisplayReconfiguration()
     }
-    environment.store.handleDisplayReconfiguration()
+    defer { environment.mirroringManager.onMirrorChange = nil }
+    await environment.store.handleDisplayReconfiguration()
 
     let targetDisplayID = environment.backend.connections[profile.id]!.displayID
     XCTAssertEqual(
@@ -135,7 +146,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
     let targetDisplayID = environment.backend.connections[profileID]!.displayID
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
     environment.mirroringManager.simulateActualMirror(
       targetDisplayID: targetDisplayID, sourceID: nil)
 
@@ -157,8 +168,8 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
       resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let disconnectedID = disconnectEnvironment.store.profiles[0].id
     let disconnectedTarget = disconnectEnvironment.backend.connections[disconnectedID]!.displayID
-    disconnectEnvironment.store.setMirrorSource(source.id, for: disconnectedID)
-    disconnectEnvironment.store.disconnectProfile(id: disconnectedID)
+    await disconnectEnvironment.store.setMirrorSource(source.id, for: disconnectedID)
+    await disconnectEnvironment.store.disconnectProfile(id: disconnectedID)
     XCTAssertEqual(
       disconnectEnvironment.store.profile(id: disconnectedID)?.mirrorSourceID, source.id)
     XCTAssertEqual(
@@ -172,8 +183,8 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
       resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let removedID = removeEnvironment.store.profiles[0].id
     let removedTarget = removeEnvironment.backend.connections[removedID]!.displayID
-    removeEnvironment.store.setMirrorSource(source.id, for: removedID)
-    removeEnvironment.store.removeProfile(id: removedID)
+    await removeEnvironment.store.setMirrorSource(source.id, for: removedID)
+    await removeEnvironment.store.removeProfile(id: removedID)
     XCTAssertEqual(
       removeEnvironment.mirroringManager.mirrorRequests.last,
       MirrorRequest(targetDisplayID: removedTarget, sourceID: nil)
@@ -185,11 +196,17 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     await terminationEnvironment.store.addDisplay(
       resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let terminatedID = terminationEnvironment.store.profiles[0].id
-    let terminatedTarget = terminationEnvironment.backend.connections[terminatedID]!.displayID
-    terminationEnvironment.store.setMirrorSource(source.id, for: terminatedID)
+    let terminatedConnection = terminationEnvironment.backend.connections[terminatedID]!
+    let terminatedTarget = terminatedConnection.displayID
+    await terminationEnvironment.store.setMirrorSource(source.id, for: terminatedID)
+    let terminated = expectation(description: "Terminated mirror connection is invalidated")
+    terminatedConnection.onInvalidate = { terminated.fulfill() }
+    defer { terminatedConnection.onInvalidate = nil }
+
     terminationEnvironment.backend.terminate(profileID: terminatedID)
-    await Task.yield()
-    await Task.yield()
+    await fulfillment(of: [terminated], timeout: 2)
+    await terminationEnvironment.store.waitForDisplayUpdates()
+
     XCTAssertEqual(
       terminationEnvironment.mirroringManager.mirrorRequests.last,
       MirrorRequest(targetDisplayID: terminatedTarget, sourceID: nil)
@@ -204,7 +221,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
     let firstConnection = environment.backend.connections[profileID]!
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
 
     await environment.store.renameProfile(id: profileID, to: "Studio")
 
@@ -230,10 +247,10 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
     let connection = environment.backend.connections[profileID]!
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
     environment.mirroringManager.setMirrorError = DisplayMirroringError.configurationFailed(1)
 
-    environment.store.disconnectProfile(id: profileID)
+    await environment.store.disconnectProfile(id: profileID)
 
     XCTAssertTrue(connection.invalidated)
     XCTAssertEqual(environment.store.state(for: profileID), .disconnected)
@@ -250,7 +267,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
     environment.mirroringManager.sources = [source]
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profileID = environment.store.profiles[0].id
-    environment.store.setMirrorSource(source.id, for: profileID)
+    await environment.store.setMirrorSource(source.id, for: profileID)
 
     await environment.store.setResolution(
       ResolutionPreset.preset(withID: "2560x1440")!,

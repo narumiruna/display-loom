@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		ACE5813F358516684DE86FA9 /* DisplayOperationWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39DD6FEF1B776C2439121F21 /* DisplayOperationWorker.swift */; };
+		228C86FB984887DA8F500D58 /* BackendPerformanceChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472CB0CE469013F8913628E3 /* BackendPerformanceChecks.swift */; };
+		33EDD83DCC16EC9FBA67486F /* DisplayPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5698C09865CF1EB50BC0CD0 /* DisplayPerformanceTests.swift */; };
+		F75A3772C696F84E9BD45027 /* PerformanceChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4A8474E15C429A3167A5E89 /* PerformanceChecks.swift */; };
 		0FA42106B7591DAB28B13397 /* ResolutionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF306AEE45D19B9D635E8C06 /* ResolutionPreset.swift */; };
 		148256B2611D0D073F96E9C8 /* CoreGraphicsVirtualDisplayBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35B6D9F32EC9CF827C1AE367 /* CoreGraphicsVirtualDisplayBackend.swift */; };
 		14EB5946D154C8F9BD08E686 /* CoreGraphicsVirtualDisplayBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16913066B5C6321528E44B9 /* CoreGraphicsVirtualDisplayBackendTests.swift */; };
@@ -53,6 +57,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		39DD6FEF1B776C2439121F21 /* DisplayOperationWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayOperationWorker.swift; sourceTree = "<group>"; };
+		472CB0CE469013F8913628E3 /* BackendPerformanceChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendPerformanceChecks.swift; sourceTree = "<group>"; };
+		F5698C09865CF1EB50BC0CD0 /* DisplayPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayPerformanceTests.swift; sourceTree = "<group>"; };
+		E4A8474E15C429A3167A5E89 /* PerformanceChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceChecks.swift; sourceTree = "<group>"; };
 		0392E537B66C2DCF9321307D /* DisplayLoomTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DisplayLoomTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E8499D2842E8624980158C3 /* VirtualDisplayBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayBackend.swift; sourceTree = "<group>"; };
 		1C6291E17D85E9FC0AA7D4D1 /* StateRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateRepository.swift; sourceTree = "<group>"; };
@@ -117,6 +125,7 @@
 			children = (
 				35B6D9F32EC9CF827C1AE367 /* CoreGraphicsVirtualDisplayBackend.swift */,
 				A1ACA59857EC71663F2D5CCC /* DisplayMirroringManager.swift */,
+				39DD6FEF1B776C2439121F21 /* DisplayOperationWorker.swift */,
 				DFC83A9832A065B27EE5D60E /* LaunchAtLoginManager.swift */,
 				B78E6E4A60EB357911C9D43C /* StableDisplayIdentity.swift */,
 				0E8499D2842E8624980158C3 /* VirtualDisplayBackend.swift */,
@@ -166,7 +175,10 @@
 		A180A7F44BBF60122450F86D /* DisplayLoomTests */ = {
 			isa = PBXGroup;
 			children = (
+				472CB0CE469013F8913628E3 /* BackendPerformanceChecks.swift */,
 				B16913066B5C6321528E44B9 /* CoreGraphicsVirtualDisplayBackendTests.swift */,
+				F5698C09865CF1EB50BC0CD0 /* DisplayPerformanceTests.swift */,
+				E4A8474E15C429A3167A5E89 /* PerformanceChecks.swift */,
 				B94287CA53A8E8A63416FD55 /* DisplayMirroringManagerTests.swift */,
 				65A349DE2884E7E01F61B191 /* LiveVirtualDisplayTests.swift */,
 				AEA9DD8B8929B6EDF29625D0 /* PersistenceTests.swift */,
@@ -352,6 +364,7 @@
 				148256B2611D0D073F96E9C8 /* CoreGraphicsVirtualDisplayBackend.swift in Sources */,
 				193F1108E15DED7C16871CDD /* DialogPresenter.swift in Sources */,
 				582966FA244B9A08845BF886 /* DisplayMirroringManager.swift in Sources */,
+				ACE5813F358516684DE86FA9 /* DisplayOperationWorker.swift in Sources */,
 				3F8921F25D8F3E2ACFFA5268 /* LaunchAtLoginManager.swift in Sources */,
 				AB9FAAED8E161C4AECBBF220 /* MenuBarContent.swift in Sources */,
 				E17E25728A25B03BA313B2AD /* PersistedState.swift in Sources */,
@@ -370,7 +383,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				228C86FB984887DA8F500D58 /* BackendPerformanceChecks.swift in Sources */,
 				14EB5946D154C8F9BD08E686 /* CoreGraphicsVirtualDisplayBackendTests.swift in Sources */,
+				33EDD83DCC16EC9FBA67486F /* DisplayPerformanceTests.swift in Sources */,
+				F75A3772C696F84E9BD45027 /* PerformanceChecks.swift in Sources */,
 				36B6404B420CD685CD16E2CC /* DisplayMirroringManagerTests.swift in Sources */,
 				2AB1FF81C06B0283F5744C65 /* LiveVirtualDisplayTests.swift in Sources */,
 				A8796038CC51DC863E3CBC41 /* PersistenceTests.swift in Sources */,

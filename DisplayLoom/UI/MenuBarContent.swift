@@ -56,7 +56,7 @@ struct MenuBarContent: View {
 
       if state.isConnected || state.isBusy {
         Button {
-          store.disconnectProfile(id: profile.id)
+          Task { await store.disconnectProfile(id: profile.id) }
         } label: {
           Label("menu.disconnect", systemImage: "stop.circle")
         }
@@ -90,7 +90,7 @@ struct MenuBarContent: View {
 
       Button(role: .destructive) {
         guard DialogPresenter.confirmRemoval(name: profile.name) else { return }
-        store.removeProfile(id: profile.id)
+        Task { await store.removeProfile(id: profile.id) }
       } label: {
         Label("menu.remove", systemImage: "trash")
       }
@@ -113,8 +113,10 @@ struct MenuBarContent: View {
 
     return Menu {
       Button {
-        store.setMirrorSource(nil, for: profile.id)
-        presentStoreErrorIfNeeded()
+        Task {
+          await store.setMirrorSource(nil, for: profile.id)
+          presentStoreErrorIfNeeded()
+        }
       } label: {
         if activeSourceID == nil {
           Label("menu.mirrorNone", systemImage: "checkmark")
@@ -139,8 +141,10 @@ struct MenuBarContent: View {
         Divider()
         ForEach(store.mirrorSources) { source in
           Button {
-            store.setMirrorSource(source.id, for: profile.id)
-            presentStoreErrorIfNeeded()
+            Task {
+              await store.setMirrorSource(source.id, for: profile.id)
+              presentStoreErrorIfNeeded()
+            }
           } label: {
             if activeSourceID == source.id {
               Label(source.name, systemImage: "checkmark")
