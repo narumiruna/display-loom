@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -181,8 +182,12 @@ esac
             (ROOT / ".github/workflows/release.yml").read_text(),
             Loader=yaml.BaseLoader,
         )
-        self.assertEqual(set(workflow["on"]), {"push", "workflow_dispatch"})
+        self.assertEqual(set(workflow["on"]), {"push", "pull_request", "workflow_dispatch"})
         self.assertEqual(workflow["on"]["push"]["branches"], ["main"])
+        self.assertEqual(
+            workflow["on"]["pull_request"],
+            {"branches": ["main"], "types": ["closed"]},
+        )
         self.assertEqual(workflow["on"]["workflow_dispatch"], "")
         self.assertEqual(workflow["permissions"], {"contents": "read"})
         self.assertNotIn("concurrency", workflow)
@@ -194,9 +199,10 @@ esac
             "github.event_name == 'push' && github.ref == 'refs/heads/main'",
         )
         self.assertEqual(
-            publication["if"],
-            "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+            publication["steps"][0]["with"]["ref"],
+            "${{ github.event.pull_request.merge_commit_sha || github.sha }}",
         )
+        self.assertEqual(publication["steps"][0]["with"]["fetch-depth"], "0")
         self.assertEqual(
             preparation["permissions"],
             {"contents": "write", "pull-requests": "write"},
@@ -215,6 +221,69 @@ esac
         self.assertEqual(preparation["steps"][-1]["with"]["operation"], "manage-pr")
         self.assertNotIn("needs", publication)
         self.assertFalse((ROOT / ".github/workflows/changenote.yml").exists())
+
+    def test_release_workflow_publishes_only_release_pr_merges_or_main_dispatches(self):
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/release.yml").read_text(),
+            Loader=yaml.BaseLoader,
+        )
+        cases = (
+            ("main push", {"event_name": "push"}, {"release-pr"}),
+            ("branch push", {"event_name": "push", "ref": "refs/heads/topic"}, set()),
+            ("main dispatch", {"event_name": "workflow_dispatch"}, {"release"}),
+            ("branch dispatch", {
+                "event_name": "workflow_dispatch", "ref": "refs/heads/topic",
+            }, set()),
+            ("merged Release PR", {}, {"release"}),
+            ("unmerged Release PR", {"merged": False}, set()),
+            ("ordinary merged PR", {"head": "narumi/fix/display-recovery"}, set()),
+            ("fork Release PR", {"head_repository": "fork/display-loom"}, set()),
+            ("other base branch", {"base": "develop"}, set()),
+            ("other ref", {"ref": "refs/heads/develop"}, set()),
+            ("opened Release PR", {"action": "opened"}, set()),
+            ("updated Release PR", {"action": "synchronize"}, set()),
+            ("other event", {"event_name": "pull_request_target"}, set()),
+        )
+        for name, overrides, expected in cases:
+            with self.subTest(event=name):
+                values = {
+                    "event_name": "pull_request",
+                    "ref": "refs/heads/main",
+                    "action": "closed",
+                    "merged": True,
+                    "base": "main",
+                    "head": "narumi/chore/changenote-release-main",
+                    "head_repository": "narumiruna/display-loom",
+                    **overrides,
+                }
+                pull_request = None
+                if values["event_name"] == "pull_request":
+                    pull_request = SimpleNamespace(
+                        merged=values["merged"],
+                        base=SimpleNamespace(ref=values["base"]),
+                        head=SimpleNamespace(
+                            ref=values["head"],
+                            repo=SimpleNamespace(full_name=values["head_repository"]),
+                        ),
+                    )
+                github = SimpleNamespace(
+                    event_name=values["event_name"],
+                    ref=values["ref"],
+                    repository="narumiruna/display-loom",
+                    event=SimpleNamespace(
+                        action=values["action"], pull_request=pull_request,
+                    ),
+                )
+                selected = set()
+                for job, configuration in workflow["jobs"].items():
+                    # These job conditions use only comparisons and boolean operators.
+                    condition = (
+                        configuration["if"].replace("&&", "and")
+                        .replace("||", "or").replace("true", "True")
+                    )
+                    if eval(f"({condition})", {"__builtins__": {}}, {"github": github}):
+                        selected.add(job)
+                self.assertEqual(selected, expected)
 
     def test_release_workflow_reads_the_bumped_version_without_input(self):
         self.prepare_publication()

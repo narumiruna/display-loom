@@ -89,7 +89,7 @@ def mock_command():
                 print(" M source.swift")
         elif args == ["rev-parse", "HEAD"]:
             print(state["head"])
-        elif args == ["rev-parse", "refs/remotes/origin/main"]:
+        elif args in (["rev-parse", "origin/main"], ["rev-parse", "refs/remotes/origin/main"]):
             print(state["origin"])
         elif args[:3] == ["rev-parse", "--quiet", "--verify"]:
             return 0 if state.get("local_tag") else 1
@@ -362,6 +362,26 @@ class ReleaseTests(unittest.TestCase):
             commands,
         )
         self.assertIn(["gh", "release", "edit", f"v{VERSION}", "--draft=false", "--latest"], commands)
+
+    def test_workflow_validation_rejects_a_merge_commit_behind_main(self):
+        self.fixture.env["GITHUB_REF"] = "refs/heads/main"
+        self.fixture.update_state(origin=NEW_COMMIT)
+        step = workflow_steps()["Validate release request"]
+        self.assert_rejected_without_publication(
+            self.fixture.run(shell=step["run"]),
+            "Checked-out commit does not match origin/main",
+        )
+        self.assertEqual(Path(self.fixture.env["GITHUB_ENV"]).read_text(), "")
+
+    def test_packaging_rejects_a_merge_commit_behind_main(self):
+        self.fixture.update_state(origin=NEW_COMMIT)
+        self.assert_rejected_without_publication(self.fixture.package(), "main must match origin/main")
+        self.assertFalse(self.fixture.artifact.exists())
+
+    def test_publication_rejects_a_merge_commit_behind_main(self):
+        self.fixture.seed_artifact()
+        self.fixture.update_state(origin=NEW_COMMIT)
+        self.assert_rejected_without_publication(self.fixture.publish(), "main must match origin/main")
 
     def test_old_artifact_with_new_main_and_same_version_is_rejected(self):
         self.assert_success(self.fixture.package())
