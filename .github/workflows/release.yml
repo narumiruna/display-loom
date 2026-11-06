@@ -2,11 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: Version to release without the v prefix, for example 0.2.0
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -22,7 +17,6 @@ jobs:
     timeout-minutes: 60
     environment: release
     env:
-      VERSION: ${{ inputs.version }}
       DEVELOPMENT_TEAM: A4YQL6FFTK
       NOTARY_PROFILE: display-loom-notary
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
@@ -34,6 +28,9 @@ jobs:
           fetch-depth: 0
           ref: main
 
+      - name: Install changenote
+        run: cargo install --git https://github.com/narumiruna/changenote --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
+
       - name: Validate release request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,11 +41,6 @@ jobs:
             echo "Release workflow must be dispatched from main." >&2
             exit 1
           }
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Version must use MAJOR.MINOR.PATCH format." >&2
-            exit 1
-          }
-
           git fetch --quiet origin main --tags
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || {
             echo "Checked-out commit does not match origin/main." >&2
@@ -59,15 +51,12 @@ jobs:
             exit 1
           }
 
-          project_version="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
-          [[ "$project_version" == "$VERSION" ]] || {
-            echo "project.yml version is $project_version, expected $VERSION." >&2
+          VERSION="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Configuration/Version.xcconfig must use MAJOR.MINOR.PATCH format." >&2
             exit 1
           }
-          [[ -f "docs/releases/v$VERSION.md" ]] || {
-            echo "Missing docs/releases/v$VERSION.md." >&2
-            exit 1
-          }
+          changenote release-notes --package display-loom --version "$VERSION" >/dev/null
 
           tag="v$VERSION"
           ! git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null || {
@@ -78,6 +67,7 @@ jobs:
             echo "GitHub Release already exists: $tag" >&2
             exit 1
           }
+          printf 'VERSION=%s\n' "$VERSION" >>"$GITHUB_ENV"
 
       - name: Run tests
         run: |
@@ -171,13 +161,12 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          CONFIRM_PUBLISH: v${{ inputs.version }}
           RELEASE_TAG_MODE: annotated
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          ./scripts/publish-release.sh "$VERSION"
+          CONFIRM_PUBLISH="v$VERSION" ./scripts/publish-release.sh "$VERSION"
 
       - name: Delete temporary credentials
         if: always()

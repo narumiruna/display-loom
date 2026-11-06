@@ -21,11 +21,11 @@ release_dir="$root/.release"
 artifact_name="Display-Loom-${version}.zip"
 artifact_path="$release_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
-notes_path="$root/docs/releases/$tag.md"
+notes_path="$release_dir/release-notes.md"
 
 cd "$root"
 
-for command in git gh shasum; do
+for command in git gh shasum changenote; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
@@ -37,11 +37,12 @@ current_branch="$(git branch --show-current)"
 [[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release must be published from main"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
 
-project_version="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
+project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
 [[ "$project_version" == "$version" ]] || fail "project version is $project_version, expected $version"
 [[ -f "$artifact_path" ]] || fail "release artifact not found: $artifact_path"
 [[ -f "$checksum_path" ]] || fail "checksum not found: $checksum_path"
-[[ -f "$notes_path" ]] || fail "release notes not found: $notes_path"
+changenote release-notes --package display-loom --version "$version" >"$notes_path"
+[[ -s "$notes_path" ]] || fail "release notes are empty: $notes_path"
 
 (
   cd "$release_dir"

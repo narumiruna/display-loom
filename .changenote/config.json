@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/narumiruna/changenote/f4423760122463bf03a8d161c6f0bc4173afb6e0/schema.json",
+  "packages": {
+    "display-loom": {
+      "path": ".",
+      "version_file": "Configuration/Version.xcconfig",
+      "tag_prefix": "v"
+    }
+  }
+}

@@ -102,6 +102,7 @@
 		E10FB8F7CB3BB24C1B52AEB0 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		E36756C2028A05BCF66E9CAE /* VirtualDisplayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayStore.swift; sourceTree = "<group>"; };
 		E42C55754322CD29C9B5DF79 /* Display Loom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Display Loom.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE9EC6245783192897C4EB18 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Version.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -232,6 +233,7 @@
 		CD4064CA4C92F3DFE64CDE43 = {
 			isa = PBXGroup;
 			children = (
+				EE9EC6245783192897C4EB18 /* Version.xcconfig */,
 				C357FF424BDD58D0B7324489 /* DisplayLoom */,
 				A180A7F44BBF60122450F86D /* DisplayLoomTests */,
 				5CB0C058E1C762FE5773FA7F /* Frameworks */,
@@ -475,6 +477,7 @@
 		};
 		76819B15B98E0B55EB72F8D3 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EE9EC6245783192897C4EB18 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -533,7 +536,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -591,6 +593,7 @@
 		};
 		D24CBA66353E54B0FBF33524 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EE9EC6245783192897C4EB18 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -643,7 +646,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

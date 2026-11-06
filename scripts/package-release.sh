@@ -41,7 +41,7 @@ current_branch="$(git branch --show-current)"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
 
-project_version="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
+project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
 build_version="$(awk -F'"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' project.yml)"
 [[ "$project_version" == "$version" ]] || fail "project version is $project_version, expected $version"
 [[ -n "$build_version" ]] || fail "CURRENT_PROJECT_VERSION is missing from project.yml"
