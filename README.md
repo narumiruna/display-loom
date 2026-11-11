@@ -12,7 +12,39 @@ Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. D
 
 ## Install
 
-Download the signed and notarized universal app from the [latest GitHub Release](https://github.com/narumiruna/display-loom/releases/latest), extract it, and move **Display Loom.app** to **Applications**.
+Open the [latest GitHub Release](https://github.com/narumiruna/display-loom/releases/latest) and use the steps for its file format. Existing releases can have ZIP assets instead of a DMG.
+
+Download the package and matching `.sha256` file from the same Release. Save both files in the same directory. Replace `<version>` below with the version in the downloaded filenames. If you saved the files outside **Downloads**, change the directory path too.
+
+Continue only if `shasum` succeeds and prints the package filename followed by `: OK`. If the check fails, stop. Do not extract the ZIP, open the DMG, or use **Open Anyway**. Download both files again from the same official Release.
+
+1. **ZIP release:** Download `Display-Loom-<version>.zip` and `Display-Loom-<version>.zip.sha256`. In Terminal, run:
+
+   ```sh
+   cd "$HOME/Downloads"
+   shasum -a 256 -c "Display-Loom-<version>.zip.sha256"
+   ```
+
+   After verification, extract the ZIP and move **Display Loom.app** to **Applications**.
+
+2. **DMG release:** Download `Display-Loom-<version>.dmg` and `Display-Loom-<version>.dmg.sha256`. In Terminal, run:
+
+   ```sh
+   cd "$HOME/Downloads"
+   shasum -a 256 -c "Display-Loom-<version>.dmg.sha256"
+   ```
+
+   After verification, open the DMG and drag **Display Loom.app** to **Applications**.
+
+A matching checksum checks file integrity; it does not verify the publisher. New DMG builds use ad-hoc signing, not Developer ID signing or Apple notarization. Gatekeeper can block downloaded copies.
+
+On macOS 14 and later, use the following steps only if you trust the official download and have checked its checksum:
+
+1. Try to open **Display Loom.app** from **Applications**, then close the alert about an unverified developer or missing notarization.
+2. Open **System Settings > Privacy & Security**, scroll to **Security**, and click **Open Anyway** for Display Loom.
+3. Confirm **Open** and authenticate if macOS asks.
+
+This adds an exception for this app. Do not override malware or damaged-app alerts. See [Apple's instructions](https://support.apple.com/en-us/102445#openanyway).
 
 ## Build and run
 
@@ -92,7 +124,7 @@ just test-live
 
 ## Change notes and releases
 
-Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and signed app publication, and the [changelog](CHANGELOG.md) for release history.
+Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and DMG release publication, and the [changelog](CHANGELOG.md) for release history.
 
 ## Development checks
 

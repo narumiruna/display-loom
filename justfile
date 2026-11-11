@@ -78,11 +78,11 @@ build-release:
       CODE_SIGNING_ALLOWED=NO \
       build
 
-# Build, sign, notarize, verify, and package a release.
+# Build a universal app, apply ad-hoc signing, and package a verified DMG.
 package-release version:
     DEVELOPER_DIR="{{developer_dir}}" ./scripts/package-release.sh "{{version}}"
 
-# Publish a packaged release to GitHub after explicit confirmation.
+# Upload a packaged DMG to an existing GitHub Release after explicit confirmation.
 publish-release version:
     ./scripts/publish-release.sh "{{version}}"
 

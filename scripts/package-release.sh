@@ -14,51 +14,34 @@ fail() {
 [[ $# -eq 1 ]] || usage
 
 version="$1"
-team_id="${DEVELOPMENT_TEAM:-A4YQL6FFTK}"
-notary_profile="${NOTARY_PROFILE:-display-loom-notary}"
-notary_keychain="${NOTARY_KEYCHAIN:-}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 release_dir="$root/.release"
-archive_path="$release_dir/DisplayLoom.xcarchive"
-export_path="$release_dir/export"
-app_path="$export_path/Display Loom.app"
-artifact_name="Display-Loom-${version}.zip"
+build_dir="$release_dir/build"
+app_path="$build_dir/Build/Products/Release/Display Loom.app"
+staging_dir="$release_dir/dmg-root"
+artifact_name="Display-Loom-${version}.dmg"
 artifact_path="$release_dir/$artifact_name"
 provenance_path="$artifact_path.commit"
-submission_path="$release_dir/notarization-submission.zip"
-export_options="$release_dir/ExportOptions.plist"
-notary_result="$release_dir/notarization.json"
 executable_path="$app_path/Contents/MacOS/Display Loom"
 
 cd "$root"
 
-for command in git security xcodebuild xcrun codesign spctl ditto lipo shasum plutil; do
+for command in git xcodebuild codesign ditto hdiutil lipo shasum plutil ln; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must use MAJOR.MINOR.PATCH format"
 current_branch="$(git branch --show-current)"
-[[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release artifacts must be built from main"
+[[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release artifacts must be built from main or a detached release commit"
 source_commit="$(git rev-parse HEAD)"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
-[[ "$source_commit" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
+git merge-base --is-ancestor "$source_commit" refs/remotes/origin/main \
+  || fail "release commit must be on origin/main"
 
 project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
 build_version="$(awk -F'"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' project.yml)"
 [[ "$project_version" == "$version" ]] || fail "project version is $project_version, expected $version"
 [[ -n "$build_version" ]] || fail "CURRENT_PROJECT_VERSION is missing from project.yml"
-
-security find-identity -v -p codesigning \
-  | grep -F 'Developer ID Application:' \
-  | grep -F "($team_id)" >/dev/null \
-  || fail "Developer ID Application certificate for team $team_id is not installed"
-
-notary_auth=(--keychain-profile "$notary_profile")
-if [[ -n "$notary_keychain" ]]; then
-  notary_auth+=(--keychain "$notary_keychain")
-fi
-xcrun notarytool history "${notary_auth[@]}" >/dev/null \
-  || fail "notary profile '$notary_profile' is unavailable or invalid"
 
 rm -rf "$release_dir"
 mkdir -p "$release_dir"
@@ -68,71 +51,35 @@ xcodebuild \
   -scheme DisplayLoom \
   -configuration Release \
   -destination 'generic/platform=macOS' \
-  -archivePath "$archive_path" \
-  DEVELOPMENT_TEAM="$team_id" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="Developer ID Application" \
-  archive
+  -derivedDataPath "$build_dir" \
+  'ARCHS=arm64 x86_64' \
+  ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 
-cat >"$export_options" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>destination</key>
-  <string>export</string>
-  <key>method</key>
-  <string>developer-id</string>
-  <key>signingCertificate</key>
-  <string>Developer ID Application</string>
-  <key>signingStyle</key>
-  <string>manual</string>
-  <key>teamID</key>
-  <string>$team_id</string>
-</dict>
-</plist>
-EOF
-
-xcodebuild \
-  -exportArchive \
-  -archivePath "$archive_path" \
-  -exportPath "$export_path" \
-  -exportOptionsPlist "$export_options"
-
-[[ -d "$app_path" ]] || fail "exported app not found at $app_path"
+[[ -d "$app_path" ]] || fail "built app not found: $app_path"
 [[ "$(plutil -extract CFBundleShortVersionString raw "$app_path/Contents/Info.plist")" == "$version" ]] \
-  || fail "exported app has an unexpected version"
+  || fail "built app has an unexpected version"
 [[ "$(plutil -extract CFBundleVersion raw "$app_path/Contents/Info.plist")" == "$build_version" ]] \
-  || fail "exported app has an unexpected build number"
+  || fail "built app has an unexpected build number"
 
 architectures="$(lipo -archs "$executable_path")"
 [[ " $architectures " == *" arm64 "* && " $architectures " == *" x86_64 "* ]] \
-  || fail "exported executable is not universal: $architectures"
+  || fail "built executable is not universal: $architectures"
 
+# Ad-hoc signing preserves sandbox entitlements, not Developer ID trust or notarization.
+codesign --force --sign - --timestamp=none --options runtime \
+  --entitlements "$root/DisplayLoom/Resources/DisplayLoom.entitlements" \
+  "$app_path"
 codesign --verify --deep --strict --verbose=2 "$app_path"
-signature_details="$(codesign --display --verbose=4 "$app_path" 2>&1)"
-grep -F 'Authority=Developer ID Application:' <<<"$signature_details" >/dev/null \
-  || fail "app is not signed with Developer ID Application"
-grep -F "TeamIdentifier=$team_id" <<<"$signature_details" >/dev/null \
-  || fail "app signature uses an unexpected team"
 
-ditto -c -k --sequesterRsrc --keepParent "$app_path" "$submission_path"
-xcrun notarytool submit "$submission_path" \
-  "${notary_auth[@]}" \
-  --wait \
-  --output-format json \
-  >"$notary_result"
-
-notary_status="$(plutil -extract status raw "$notary_result")"
-[[ "$notary_status" == "Accepted" ]] || fail "notarization status is $notary_status; see $notary_result"
-
-xcrun stapler staple "$app_path"
-xcrun stapler validate "$app_path"
-codesign --verify --deep --strict --verbose=2 "$app_path"
-spctl --assess --type execute --verbose=2 "$app_path"
-
-rm -f "$submission_path" "$artifact_path" "$artifact_path.sha256" "$provenance_path"
-ditto -c -k --sequesterRsrc --keepParent "$app_path" "$artifact_path"
+mkdir -p "$staging_dir"
+ditto "$app_path" "$staging_dir/Display Loom.app"
+ln -s /Applications "$staging_dir/Applications"
+hdiutil create -quiet -volname 'Display Loom' -srcfolder "$staging_dir" \
+  -ov -format UDZO "$artifact_path" </dev/null
+hdiutil verify "$artifact_path" </dev/null
+rm -rf "$staging_dir"
 (
   cd "$release_dir"
   shasum -a 256 "$artifact_name" >"$artifact_name.sha256"
