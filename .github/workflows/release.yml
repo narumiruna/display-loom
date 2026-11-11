@@ -93,7 +93,8 @@ jobs:
           RELEASE_COMMIT: ${{ steps.select.outputs.release-commit }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_COMMIT" != "$BEFORE" ]]
+          # Bash 3.2 does not apply errexit to [[ ... ]]; exit explicitly.
+          [[ "$RELEASE_COMMIT" != "$BEFORE" ]] || exit 1
           git merge-base --is-ancestor "$BEFORE" "$RELEASE_COMMIT"
           git merge-base --is-ancestor "$RELEASE_COMMIT" "$GITHUB_SHA"
 
@@ -186,11 +187,11 @@ jobs:
         run: |
           set -euo pipefail
           version="$(jq -er '.[] | select(.package == "display-loom") | .version' <<<"$RELEASES")"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
           artifact="Display-Loom-$version.dmg"
-          [[ "$(<".release/$artifact.commit")" == "$(git rev-parse HEAD)" ]]
+          [[ "$(<".release/$artifact.commit")" == "$(git rev-parse HEAD)" ]] || exit 1
           checksum="$(cd .release && shasum -a 256 "$artifact")"
-          [[ "$(<".release/$artifact.sha256")" == "$checksum" ]]
+          [[ "$(<".release/$artifact.sha256")" == "$checksum" ]] || exit 1
           (cd .release && shasum -a 256 -c "$artifact.sha256")
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
