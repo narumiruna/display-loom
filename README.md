@@ -12,20 +12,31 @@ Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. D
 
 ## Install
 
-Download both `Display-Loom-<version>.dmg` and `Display-Loom-<version>.dmg.sha256` from the same [GitHub Release](https://github.com/narumiruna/display-loom/releases/latest). Save both files in the same directory.
+Open the [latest GitHub Release](https://github.com/narumiruna/display-loom/releases/latest) and use the steps for its file format. Existing releases can have ZIP assets instead of a DMG.
 
-Open Terminal and replace `<version>` below with the version in the downloaded filenames. If you saved the files outside **Downloads**, change the directory path too.
+Download the package and matching `.sha256` file from the same Release. Save both files in the same directory. Replace `<version>` below with the version in the downloaded filenames. If you saved the files outside **Downloads**, change the directory path too.
 
-```sh
-cd "$HOME/Downloads"
-shasum -a 256 -c "Display-Loom-<version>.dmg.sha256"
-```
+Continue only if `shasum` succeeds and prints the package filename followed by `: OK`. If the check fails, stop. Do not extract the ZIP, open the DMG, or use **Open Anyway**. Download both files again from the same official Release.
 
-Continue only if the command succeeds and prints `Display-Loom-<version>.dmg: OK`. If the check fails, stop. Do not open the DMG or use **Open Anyway**. Download both files again from the same official Release.
+1. **ZIP release:** Download `Display-Loom-<version>.zip` and `Display-Loom-<version>.zip.sha256`. In Terminal, run:
 
-After verification, open the DMG and drag **Display Loom.app** to **Applications**. A matching checksum checks file integrity; it does not verify the publisher.
+   ```sh
+   cd "$HOME/Downloads"
+   shasum -a 256 -c "Display-Loom-<version>.zip.sha256"
+   ```
 
-These builds use ad-hoc signing, not Developer ID signing or Apple notarization. Gatekeeper can block downloaded copies.
+   After verification, extract the ZIP and move **Display Loom.app** to **Applications**.
+
+2. **DMG release:** Download `Display-Loom-<version>.dmg` and `Display-Loom-<version>.dmg.sha256`. In Terminal, run:
+
+   ```sh
+   cd "$HOME/Downloads"
+   shasum -a 256 -c "Display-Loom-<version>.dmg.sha256"
+   ```
+
+   After verification, open the DMG and drag **Display Loom.app** to **Applications**.
+
+A matching checksum checks file integrity; it does not verify the publisher. New DMG builds use ad-hoc signing, not Developer ID signing or Apple notarization. Gatekeeper can block downloaded copies.
 
 On macOS 14 and later, use the following steps only if you trust the official download and have checked its checksum:
 
