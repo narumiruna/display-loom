@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+### Patch Changes
+
+- Fix release checks on macOS so automated DMG packaging can complete.
+
 ## 0.1.2
 
 ### Patch Changes
