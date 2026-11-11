@@ -23,6 +23,8 @@ BASH = shutil.which("bash")
 VERSION = "1.2.3"
 COMMIT = "a" * 40
 NEW_COMMIT = "b" * 40
+ORIGIN_URL = "git@github.com:example/display-loom.git"
+REPOSITORY_URL = "https://github.com/example/display-loom"
 MOCK_COMMANDS = (
     "awk", "cmp", "codesign", "dirname", "ditto", "gh", "git", "hdiutil",
     "jq", "lipo", "ln", "mkdir", "mktemp", "plutil", "rm", "shasum", "xcodebuild",
@@ -108,7 +110,12 @@ def mock_command():
             if state.get("dirty_on_fetch"):
                 state["dirty"] = True
             save()
-        elif args[:3] == ["ls-remote", "--tags", "origin"]:
+        elif args == ["remote", "get-url", "origin"]:
+            if state.get("origin_url_error"):
+                return fail("mock origin URL lookup failed")
+            print(state.get("origin_url", ORIGIN_URL))
+        elif args[:2] == ["ls-remote", "--tags"]:
+            assert args[2] in ("origin", state.get("origin_url", ORIGIN_URL)), args
             tag = f"refs/tags/v{state['version']}"
             assert args[3:] == [tag, f"{tag}^{{}}"], args
             if state.get("tag_query_error"):
@@ -122,7 +129,20 @@ def mock_command():
         else:
             raise AssertionError(f"unexpected or write-capable git arguments: {args}")
     elif name == "gh":
+        if args[:2] == ["repo", "view"]:
+            assert args == ["repo", "view", state.get("origin_url", ORIGIN_URL), "--json", "url", "--jq", ".url"], args
+            if state.get("repository_query_error"):
+                return fail("mock repository lookup failed")
+            print(state.get("repository_url", REPOSITORY_URL))
+            return 0
         assert args[:1] == ["release"], args
+        if "--repo" in args:
+            index = args.index("--repo")
+            repository = args[index + 1]
+            del args[index:index + 2]
+        else:
+            repository = os.environ.get("GH_REPO", state.get("default_repository", REPOSITORY_URL))
+        assert repository == REPOSITORY_URL, f"release operation selected an unverified repository: {repository}"
         assert args[2] == f"v{state['version']}", args
         if args[1] == "view":
             if state.get("view_error") or not state.get("release", True):
@@ -435,7 +455,7 @@ class ReleaseTestCase(unittest.TestCase):
         for command in (fixture or self.fixture).commands():
             self.assertNotIn(command[:2], (["git", "tag"], ["git", "push"], ["git", "config"]), command)
             if command[0] == "gh":
-                self.assertIn(command[1:3], (["release", "view"], ["release", "download"]), command)
+                self.assertIn(command[1:3], (["repo", "view"], ["release", "view"], ["release", "download"]), command)
 
     def assert_package_rejected(self, **updates):
         self.fixture.update_state(**updates)
@@ -563,7 +583,53 @@ class PublishTests(ReleaseTestCase):
         self.fixture.seed_artifact()
 
     def uploads(self, fixture=None):
-        return [command for command in (fixture or self.fixture).commands() if command[:3] == ["gh", "release", "upload"]]
+        uploads = []
+        for command in (fixture or self.fixture).commands():
+            if command[:3] == ["gh", "release", "upload"]:
+                if "--repo" in command:
+                    index = command.index("--repo")
+                    del command[index:index + 2]
+                uploads.append(command)
+        return uploads
+
+    def test_release_operations_are_bound_to_origin(self):
+        """Ignore CLI repository overrides for views, downloads, and uploads."""
+        for origin in (ORIGIN_URL, "https://github.com/example/display-loom.git"):
+            for override in ("environment", "default"):
+                with self.subTest(origin=origin, override=override):
+                    fixture = self.new_fixture()
+                    fixture.seed_artifact()
+                    fixture.seed_remote_assets(fixture.artifact)
+                    fixture.update_state(origin_url=origin)
+                    if override == "environment":
+                        fixture.env["GH_REPO"] = "other/unverified"
+                    else:
+                        fixture.update_state(default_repository="https://github.com/other/unverified")
+                    self.assert_success(fixture.publish())
+                    commands = fixture.commands()
+                    releases = [command for command in commands if command[:2] == ["gh", "release"]]
+                    self.assertEqual({command[2] for command in releases}, {"view", "download", "upload"})
+                    for command in releases:
+                        self.assertEqual(command[command.index("--repo") + 1], REPOSITORY_URL)
+                    self.assertIn(["gh", "repo", "view", origin, "--json", "url", "--jq", ".url"], commands)
+                    lookup = next(command for command in commands if command[:3] == ["git", "ls-remote", "--tags"])
+                    self.assertEqual(lookup[3], origin)
+
+    def test_origin_lookup_failure_stops_before_github_access(self):
+        self.fixture.update_state(origin_url_error=True)
+        self.assert_failure(self.fixture.publish(), "could not read origin URL")
+        self.assertFalse(any(command[0] == "gh" for command in self.fixture.commands()))
+        self.assert_no_remote_writes()
+
+    def test_repository_lookup_failure_stops_before_release_access(self):
+        for failure in ({"repository_query_error": True}, {"repository_url": ""}):
+            with self.subTest(failure=failure):
+                fixture = self.new_fixture()
+                fixture.seed_artifact()
+                fixture.update_state(**failure)
+                self.assert_failure(fixture.publish(), "could not identify the GitHub repository")
+                self.assertFalse(any(command[:2] == ["gh", "release"] for command in fixture.commands()))
+                self.assert_no_remote_writes(fixture)
 
     def test_uploads_only_dmg_and_checksum_to_existing_release(self):
         self.assert_success(self.fixture.publish())

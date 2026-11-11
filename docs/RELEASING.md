@@ -103,7 +103,7 @@ Use the GitHub workflow for version publication and tag creation. The local uplo
 CONFIRM_PUBLISH=v0.2.0 just publish-release 0.2.0
 ```
 
-It requires GitHub CLI authentication and does not create a tag or Release. Git tag signing and app code signing are separate: the workflow creates annotated tags, and the app has only an ad-hoc signature.
+It requires GitHub CLI authentication and does not create a tag or Release. All GitHub Release operations use the repository at `origin`. `GH_REPO` and the GitHub CLI default do not change the upload target. Git tag signing and app code signing are separate: the workflow creates annotated tags, and the app has only an ad-hoc signature.
 
 ## Local checks
 

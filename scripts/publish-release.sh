@@ -56,7 +56,8 @@ git fetch --quiet origin main
 git merge-base --is-ancestor "$head_commit" refs/remotes/origin/main \
   || fail "HEAD must be an ancestor of origin/main"
 
-remote_tag="$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")" \
+origin_url="$(git remote get-url origin)" || fail "could not read origin URL"
+remote_tag="$(git ls-remote --tags "$origin_url" "refs/tags/$tag" "refs/tags/$tag^{}")" \
   || fail "could not check remote tag: $tag; retry publication"
 tag_commit=""
 peeled_commit=""
@@ -69,7 +70,11 @@ done <<<"$remote_tag"
 [[ "${peeled_commit:-$tag_commit}" == "$head_commit" ]] \
   || fail "remote tag $tag does not point to HEAD; publish the release for the selected commit first"
 
-release_json="$(gh release view "$tag" --json isDraft,assets,url)" \
+repository="$(gh repo view "$origin_url" --json url --jq .url)" \
+  || fail "could not identify the GitHub repository for origin"
+[[ -n "$repository" ]] || fail "could not identify the GitHub repository for origin"
+
+release_json="$(gh release view "$tag" --repo "$repository" --json isDraft,assets,url)" \
   || fail "could not read GitHub Release $tag; check access and publish the release before retrying"
 jq -e '.isDraft == false' <<<"$release_json" >/dev/null \
   || fail "GitHub Release $tag must exist and must not be a draft"
@@ -90,7 +95,7 @@ missing_assets=()
 for asset_path in "$artifact_path" "$checksum_path"; do
   asset_name="${asset_path##*/}"
   if jq -e --arg name "$asset_name" 'any(.assets[]; .name == $name)' <<<"$release_json" >/dev/null; then
-    gh release download "$tag" --pattern "$asset_name" --dir "$comparison_dir" \
+    gh release download "$tag" --repo "$repository" --pattern "$asset_name" --dir "$comparison_dir" \
       || fail "could not download existing asset $asset_name; retry publication without replacing assets"
     cmp -s "$asset_path" "$comparison_dir/$asset_name" \
       || fail "existing asset $asset_name differs; retry with the original packaged files, not a rebuild. Published assets must not be replaced"
@@ -102,10 +107,10 @@ done
 [[ "$(git rev-parse HEAD)" == "$head_commit" ]] || fail "HEAD changed during publication; retry from the packaging commit"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree changed during publication"
 if [[ ${#missing_assets[@]} -gt 0 ]]; then
-  gh release upload "$tag" "${missing_assets[@]}"
+  gh release upload "$tag" --repo "$repository" "${missing_assets[@]}"
 fi
 
-release_json="$(gh release view "$tag" --json isDraft,assets,url)" \
+release_json="$(gh release view "$tag" --repo "$repository" --json isDraft,assets,url)" \
   || fail "could not verify GitHub Release $tag; retry publication with the same packaged files"
 validate_assets "$release_json"
 jq -e '.isDraft == false and (.assets | length == 2)' <<<"$release_json" >/dev/null \

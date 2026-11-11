@@ -16,6 +16,14 @@ Download the universal DMG from the [latest GitHub Release](https://github.com/n
 
 These builds use ad-hoc signing, not Developer ID signing or Apple notarization. Gatekeeper can block downloaded copies.
 
+On macOS 14 and later, use the following steps only if you trust the official download and have checked its checksum:
+
+1. Try to open **Display Loom.app** from **Applications**, then close the alert about an unverified developer or missing notarization.
+2. Open **System Settings > Privacy & Security**, scroll to **Security**, and click **Open Anyway** for Display Loom.
+3. Confirm **Open** and authenticate if macOS asks.
+
+This adds an exception for this app. Do not override malware or damaged-app alerts. See [Apple's instructions](https://support.apple.com/en-us/102445#openanyway).
+
 ## Build and run
 
 With Xcode and [just](https://github.com/casey/just) installed, run from the repository root:
@@ -94,7 +102,7 @@ just test-live
 
 ## Change notes and releases
 
-Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and signed app publication, and the [changelog](CHANGELOG.md) for release history.
+Use [changenote](https://github.com/narumiruna/changenote) for release notes and version updates. See the [release guide](docs/RELEASING.md) for setup and DMG release publication, and the [changelog](CHANGELOG.md) for release history.
 
 ## Development checks
 
