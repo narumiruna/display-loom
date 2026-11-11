@@ -3,10 +3,13 @@ name: Release
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-    types: [closed]
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Manage the Release PR or retry the latest release and DMG upload
+        type: choice
+        default: manage-pr
+        options: [manage-pr, retry-publication]
 
 permissions:
   contents: read
@@ -14,13 +17,14 @@ permissions:
 jobs:
   release-pr:
     name: Prepare Release PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.operation == 'manage-pr')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
     concurrency:
-      group: changenote-release-main
+      group: changenote-release-pr-main
       cancel-in-progress: false
     steps:
       - name: Check out main
@@ -35,182 +39,170 @@ jobs:
         with:
           operation: manage-pr
           base-branch: main
+          commit-message: 'chore(release): version Display Loom'
+          pr-title: 'chore(release): version Display Loom'
 
-  release:
-    name: Sign, notarize, and publish
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event_name == 'pull_request' &&
-          github.event.action == 'closed' &&
-          github.event.pull_request.merged == true &&
-          github.event.pull_request.base.ref == 'main' &&
-          github.event.pull_request.head.ref == 'narumi/chore/changenote-release-main' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        )
-      )
-    permissions:
-      contents: write
-    concurrency:
-      group: release
-      cancel-in-progress: false
+  select:
+    name: Select release commit
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.operation == 'retry-publication')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      release-commit: ${{ steps.select.outputs.release-commit }}
+      releases: ${{ steps.select.outputs.releases }}
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check release request
+        id: request
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'publish=true' >>"$GITHUB_OUTPUT"
+          elif [[ "$BEFORE" == 0000000000000000000000000000000000000000 ]]; then
+            echo 'publish=false' >>"$GITHUB_OUTPUT"
+          else
+            status=0
+            git diff --quiet "$BEFORE" "$GITHUB_SHA" -- .changenote/releases.json || status=$?
+            case "$status" in
+              0) echo 'publish=false' >>"$GITHUB_OUTPUT" ;;
+              1) echo 'publish=true' >>"$GITHUB_OUTPUT" ;;
+              *) exit "$status" ;;
+            esac
+          fi
+
+      - name: Select verified batch
+        id: select
+        if: steps.request.outputs.publish == 'true'
+        uses: narumiruna/changenote/release@f4423760122463bf03a8d161c6f0bc4173afb6e0
+        with:
+          operation: select
+          base-branch: main
+          retry: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'retry-publication' }}
+
+      - name: Check automatic release selection
+        if: github.event_name == 'push' && steps.select.outputs.release-commit != ''
+        env:
+          BEFORE: ${{ github.event.before }}
+          RELEASE_COMMIT: ${{ steps.select.outputs.release-commit }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_COMMIT" != "$BEFORE" ]]
+          git merge-base --is-ancestor "$BEFORE" "$RELEASE_COMMIT"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" "$GITHUB_SHA"
+
+  package:
+    name: Test and package universal DMG
+    needs: select
+    if: needs.select.outputs.release-commit != ''
     runs-on: macos-26
     timeout-minutes: 60
-    environment: release
     env:
-      DEVELOPMENT_TEAM: A4YQL6FFTK
-      NOTARY_PROFILE: display-loom-notary
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-
     steps:
       - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.select.outputs.release-commit }}
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          persist-credentials: false
 
-      - name: Install changenote
-        run: cargo install --git https://github.com/narumiruna/changenote --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
 
-      - name: Validate release request
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install release check tools
         run: |
-          set -euo pipefail
+          brew install xcodegen
+          cargo install --git https://github.com/narumiruna/changenote --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
 
-          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
-            echo "Release workflow must run from main." >&2
-            exit 1
-          }
-          git fetch --quiet origin main --tags
-          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || {
-            echo "Checked-out commit does not match origin/main." >&2
-            exit 1
-          }
-          [[ -z "$(git status --porcelain)" ]] || {
-            echo "Working tree is not clean." >&2
-            exit 1
-          }
-
-          VERSION="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configuration/Version.xcconfig)"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Configuration/Version.xcconfig must use MAJOR.MINOR.PATCH format." >&2
-            exit 1
-          }
-          changenote release-notes --package display-loom --version "$VERSION" >/dev/null
-
-          tag="v$VERSION"
-          ! git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null || {
-            echo "Tag already exists: $tag" >&2
-            exit 1
-          }
-          ! gh release view "$tag" >/dev/null 2>&1 || {
-            echo "GitHub Release already exists: $tag" >&2
-            exit 1
-          }
-          printf 'VERSION=%s\n' "$VERSION" >>"$GITHUB_ENV"
-
-      - name: Run tests
+      - name: Run release script tests
         run: |
-          set -euo pipefail
+          uv run --no-project --with pyyaml python scripts/test-changenote.py
+          uv run --no-project python scripts/tests/test_release.py
+
+      - name: Run unit tests without live displays
+        run: |
           xcodebuild \
             -project DisplayLoom.xcodeproj \
             -scheme DisplayLoom \
             -derivedDataPath .derivedData \
             CODE_SIGNING_ALLOWED=NO \
+            RUN_VIRTUAL_DISPLAY_TESTS=0 \
             test
 
-      - name: Import Developer ID certificate
+      - name: Build DMG
         env:
-          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
+          RELEASES: ${{ needs.select.outputs.releases }}
         run: |
           set -euo pipefail
+          version="$(jq -er '.[] | select(.package == "display-loom") | .version' <<<"$RELEASES")"
+          ./scripts/package-release.sh "$version"
 
-          [[ -n "$CERTIFICATE_P12" ]] || {
-            echo "Missing DEVELOPER_ID_APPLICATION_P12 secret." >&2
-            exit 1
-          }
-          [[ -n "$CERTIFICATE_PASSWORD" ]] || {
-            echo "Missing DEVELOPER_ID_APPLICATION_PASSWORD secret." >&2
-            exit 1
-          }
+      - name: Retain release package
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: display-loom-dmg
+          path: |
+            .release/*.dmg
+            .release/*.dmg.sha256
+            .release/*.dmg.commit
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
-          keychain_path="$RUNNER_TEMP/display-loom-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 32)"
-          echo "::add-mask::$keychain_password"
+  publish:
+    name: Publish tag, release, and DMG
+    needs: [select, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: changenote-publication-main
+      cancel-in-progress: false
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.select.outputs.release-commit }}
+          fetch-depth: 0
 
-          printf '%s' "$CERTIFICATE_P12" | base64 --decode >"$certificate_path"
-          chmod 600 "$certificate_path"
+      - name: Download release package
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: display-loom-dmg
+          path: .release
 
-          security create-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$certificate_path" \
-            -k "$keychain_path" \
-            -P "$CERTIFICATE_PASSWORD" \
-            -t cert \
-            -f pkcs12 \
-            -T /usr/bin/codesign \
-            -T /usr/bin/productbuild \
-            -T /usr/bin/security
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$keychain_password" \
-            "$keychain_path"
-          security list-keychains -d user -s "$keychain_path"
-          security default-keychain -d user -s "$keychain_path"
-          security find-identity -v -p codesigning "$keychain_path" \
-            | grep -F 'Developer ID Application:' \
-            | grep -F "($DEVELOPMENT_TEAM)"
-
-          {
-            echo "RELEASE_KEYCHAIN_PATH=$keychain_path"
-            echo "NOTARY_KEYCHAIN=$keychain_path"
-          } >>"$GITHUB_ENV"
-
-      - name: Configure notarization credentials
+      - name: Verify downloaded package
+        id: package
         env:
-          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
-          NOTARY_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          RELEASES: ${{ needs.select.outputs.releases }}
         run: |
           set -euo pipefail
+          version="$(jq -er '.[] | select(.package == "display-loom") | .version' <<<"$RELEASES")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          artifact="Display-Loom-$version.dmg"
+          [[ "$(<".release/$artifact.commit")" == "$(git rev-parse HEAD)" ]]
+          checksum="$(cd .release && shasum -a 256 "$artifact")"
+          [[ "$(<".release/$artifact.sha256")" == "$checksum" ]]
+          (cd .release && shasum -a 256 -c "$artifact.sha256")
+          echo "version=$version" >>"$GITHUB_OUTPUT"
 
-          [[ -n "$NOTARY_APPLE_ID" ]] || {
-            echo "Missing APPLE_ID secret." >&2
-            exit 1
-          }
-          [[ -n "$NOTARY_PASSWORD" ]] || {
-            echo "Missing APPLE_APP_SPECIFIC_PASSWORD secret." >&2
-            exit 1
-          }
+      - name: Publish verified tag and release notes
+        uses: narumiruna/changenote/release@f4423760122463bf03a8d161c6f0bc4173afb6e0
+        with:
+          operation: publish
+          base-branch: main
+          expected-release-commit: ${{ needs.select.outputs.release-commit }}
 
-          xcrun notarytool store-credentials "$NOTARY_PROFILE" \
-            --apple-id "$NOTARY_APPLE_ID" \
-            --team-id "$DEVELOPMENT_TEAM" \
-            --password "$NOTARY_PASSWORD" \
-            --keychain "$RELEASE_KEYCHAIN_PATH" \
-            --validate
-
-      - name: Build, sign, and notarize
-        run: ./scripts/package-release.sh "$VERSION"
-
-      - name: Publish GitHub Release
+      - name: Upload DMG and checksum
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG_MODE: annotated
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          CONFIRM_PUBLISH="v$VERSION" ./scripts/publish-release.sh "$VERSION"
-
-      - name: Delete temporary credentials
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/display-loom-signing.keychain-db" || true
-          rm -f "$RUNNER_TEMP/developer-id-application.p12" "$RUNNER_TEMP/display-loom-signing.keychain-db"
+          VERSION: ${{ steps.package.outputs.version }}
+        run: CONFIRM_PUBLISH="v$VERSION" ./scripts/publish-release.sh "$VERSION"

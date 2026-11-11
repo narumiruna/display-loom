@@ -1,21 +1,21 @@
 # Releasing Display Loom
 
-Display Loom is distributed outside the Mac App Store as a Developer ID-signed and notarized universal macOS app. The GitHub Actions workflow in `.github/workflows/release.yml` prepares Release PRs on pushes to `main`. It starts signed publication when a Release PR is merged, or on manual dispatch.
+Display Loom is distributed outside the Mac App Store as a universal DMG for Intel and Apple Silicon Macs. The app has an ad-hoc signature that preserves its sandbox entitlements and hardened runtime. It has no Developer ID signature or Apple notarization. Gatekeeper can block downloaded copies. This workflow does not require Apple certificates, Apple account secrets, or an Apple Developer Program membership.
 
 ## Change notes and versions
 
-[changenote](https://github.com/narumiruna/changenote) manages the `display-loom` package. Install the CLI from the same commit as the Release PR Action:
+[changenote](https://github.com/narumiruna/changenote) manages package `display-loom`. Install the CLI from the same source revision as the workflow Action and configuration schema:
 
 ```sh
 cargo install --git https://github.com/narumiruna/changenote \
   --rev f4423760122463bf03a8d161c6f0bc4173afb6e0 --locked
 ```
 
-Upgrade the CLI, Action, and schema pins together. The CLI needs a stable Rust toolchain with edition 2024 support.
+Upgrade the CLI, Action, and schema pins together. Rust is needed for the changenote CLI, not for the Swift app.
 
-`Configuration/Version.xcconfig` is the release-version source for Debug and Release. Do not add `MARKETING_VERSION` overrides to `project.yml` or the generated project. A version bump does not require project regeneration.
+`Configuration/Version.xcconfig` supplies `MARKETING_VERSION` for Debug and Release. Do not override it in `project.yml` or the generated project. A version bump does not require Xcode project regeneration. `CURRENT_PROJECT_VERSION` remains a separate build number in `project.yml`; changenote does not change it.
 
-For a change that affects app users or release artifacts, add a note and commit it with the change:
+For a change that affects users or release artifacts, add a note and commit it with the change:
 
 ```sh
 changenote add improve-display-recovery \
@@ -24,194 +24,144 @@ changenote add improve-display-recovery \
 just changes
 ```
 
-Use `patch` for fixes, `minor` for compatible features, and `major` for breaking changes. Changes without release impact, such as documentation-only changes and internal tooling updates, need no note. State the reason in the PR description. Do not create empty notes or run `changenote init` again.
+Use `patch` for fixes, `minor` for compatible features, and `major` for breaking changes. Changes without release impact need no note; state the reason in the PR description. Do not create empty notes or run `changenote init` again.
 
-## Prepare a version
+## Automatic release flow
 
-The **Prepare Release PR** job in the **Release** workflow runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for the bot. The PR updates the version file and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. Review and merge it to start publication automatically. This preparation job never creates tags or GitHub Releases.
+The workflow is `.github/workflows/release.yml`:
 
-To prepare the same changes locally instead, start from a clean checkout with pending notes:
-
-```sh
-just changes
-just version
+```mermaid
+flowchart TD
+    A[Merge change notes into main] --> B[changenote creates or updates version PR]
+    B --> C[Maintainer merges version PR]
+    C --> D[Select and verify generated release commit]
+    D --> E[Run macOS tests and build universal DMG]
+    E --> F[Verify downloaded checksum and source commit]
+    F --> G[changenote creates tag and GitHub Release]
+    G --> H[Upload DMG and SHA-256 checksum]
 ```
 
-Review and commit the changed version file, changelog, saved batch, and consumed-note deletions. A run without notes does not bump the version. Do not edit the saved batch manually or run `changenote tag`; the publication script owns release tags.
+1. **Prepare Release PR** runs on pushes to `main`. It creates or updates one PR on `narumi/chore/changenote-release-main`. Reserve this branch for automation. The PR updates the version and `CHANGELOG.md`, saves `.changenote/releases.json`, and removes consumed notes. It never creates a tag or Release.
+2. Merging that PR changes the saved batch on `main`. The selection job verifies that the release tree matches changenote's generated changes. Ordinary pushes without a batch change do not publish an older batch. Initial repository pushes do not publish automatically.
+3. The macOS job checks out the exact selected commit, runs changenote integration checks, mocked release-script checks, and XCTest without live display changes, and builds both `arm64` and `x86_64` into one app. It applies an ad-hoc signature with the existing sandbox entitlements, creates the DMG with `hdiutil`, and verifies the image.
+4. A private Actions artifact retains the DMG, checksum, and source-commit sidecar for seven days. The Ubuntu publication job verifies the checksum and sidecar before any tag or Release write.
+5. The pinned changenote Action rechecks the selected commit, creates the annotated `v<version>` tag and GitHub Release, and reads the Release body from that version's `CHANGELOG.md` entry. It does not move existing tags or rewrite existing Release text.
+6. The upload script checks the remote tag identity and attaches only the DMG and checksum. The source-commit sidecar is not a public asset.
 
-`CURRENT_PROJECT_VERSION` remains a separate build number in `project.yml`; changenote does not change it. If a new build number is required, update it and run `just generate` in a separate change before preparing the release version. Keep the build number fixed during packaging and publication retries.
+PR management and publication use separate concurrency groups. A later ordinary commit on `main` does not change the selected release source. If a newer version batch replaces the selected batch before publication, the Action stops before remote writes; inspect the newer release and retry explicitly. Do not merge another version PR until the previous version and its assets are complete.
 
-Merge all release preparation into `main`. The publication workflow only releases the exact current `origin/main` commit. It reads the prepared version from `Configuration/Version.xcconfig`; no version input or additional bump is required. The workflow creates the corresponding `v<version>` tag and reads that version's release notes from `CHANGELOG.md`. Existing files in `docs/releases/` remain historical records; do not add new version files there.
+All required steps are in the same workflow. Tags created with `GITHUB_TOKEN` do not trigger another tag-push workflow.
 
-## Configure GitHub Actions
+## GitHub setup
 
-### Enable Release PRs
+The repository owner must:
 
-Enable **Actions > General > Allow GitHub Actions to create and approve pull requests**. Branch rules must permit the bot to push `narumi/chore/changenote-release-main`. The Action never approves or merges its PR.
+1. Enable **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**.
+2. Permit the bot to push the managed release branch. The Action never approves or merges its PR.
+3. Permit `contents: write` and `pull-requests: write` for PR management, and `contents: write` for publication. Other jobs use read-only repository permissions.
+4. Merge the version PR with a maintainer account or a GitHub App token. Events created with a workflow's `GITHUB_TOKEN` do not start another workflow automatically.
 
-The default `GITHUB_TOKEN` does not trigger PR workflows for bot-created PRs. If those workflows are required, configure a GitHub App token with contents and pull requests write permissions and pass it through the Action's `github-token` input. Merge Release PRs with a maintainer account or a GitHub App token. A merge made with a workflow's `GITHUB_TOKEN` does not trigger automatic publication; use manual dispatch instead. Verify repository permissions, branch rules, and token behavior on the first hosted run; local checks do not verify these settings. Do not merge another Release PR until the previous version and its app assets have been published.
+No Apple secrets or protected `release` environment are required. The default `GITHUB_TOKEN` is sufficient for this workflow when repository and organization rules allow the required operations.
 
-### Export the signing identity
+PRs created with `GITHUB_TOKEN` do not automatically trigger separate PR CI workflows. If required checks must run before a version PR can merge, use a GitHub App token with repository contents and pull requests write permissions through the Action's `github-token` input. Token setup is an account-owner task; do not put tokens in change notes or source files.
 
-In **Keychain Access**, open the `login` keychain and **My Certificates**. Export **Developer ID Application: Weipo Chen (A4YQL6FFTK)** together with its private key as a password-protected PKCS#12 file.
+## Manual runs and retries
 
-Encode the file for a GitHub secret:
+Open **GitHub > Actions > Release > Run workflow**, select `main`, and choose:
 
-```sh
-base64 -i DeveloperIDApplication.p12 | pbcopy
-```
+1. **`manage-pr`**: create or update the version PR only. This is the default and cannot publish.
+2. **`retry-publication`**: select the latest verified batch, including one whose tag and Release already exist, then rerun tests, packaging, publication, and asset upload. No version input or second version bump is needed.
 
-Delete the exported file after the GitHub secret is configured. Do not commit the file or its password.
+Retries support DMG batches prepared after this workflow migration. For the first DMG release, merge the workflow changes and their change note, then merge the generated version PR. Do not retry historical ZIP batches with this workflow: those commits contain the old packaging scripts and can require the previous signing setup. Existing tags and Releases are not converted.
 
-### Create the protected environment
+Use a full manual retry when no assets have been uploaded. If upload failed after an asset was attached, rerun the failed publication job while its seven-day Actions artifact is available. This reuses the exact packaged bytes. Regenerating a DMG can change its bytes even when the source commit is unchanged.
 
-In **GitHub > Settings > Environments**, create an environment named `release`. Restrict deployment branches to `main` and add required reviewers when available.
+The upload script checks both existing assets before it uploads missing ones. Matching assets are retained. Different bytes, unexpected asset names, draft Releases, tag conflicts, API errors, or an invalid checksum stop the process. It never uses `--clobber`, deletes an existing asset, or moves a tag. After artifact expiry or an immutable-asset conflict, inspect the existing Release before deciding how to recover; publish a new patch version if a public artifact needs replacement.
 
-Add these environment secrets:
+A GitHub Release can exist briefly without its DMG if asset upload fails after tag/Release creation. Inspect both the workflow result and the final asset list. Tag creation alone does not establish a completed app release.
 
-| Secret | Value |
-| --- | --- |
-| `DEVELOPER_ID_APPLICATION_P12` | Base64 output for the exported PKCS#12 file |
-| `DEVELOPER_ID_APPLICATION_PASSWORD` | Password used when exporting the PKCS#12 file |
-| `APPLE_ID` | Apple ID used for notarization |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password generated at `account.apple.com` |
+## Local packaging
 
-The workflow imports these credentials into a temporary keychain and configures only Apple signing tools to use the private key. Its `always()` cleanup step deletes the deterministic certificate and keychain paths under `RUNNER_TEMP`, including when certificate import or identity validation fails before environment variables are exported.
-
-## Run the GitHub workflow
-
-### Automatic publication
-
-1. Review the prepared version and changelog in the Release PR.
-2. Merge the same-repository `narumi/chore/changenote-release-main` PR into `main`.
-3. Approve the `release` environment deployment if protection rules require it.
-
-Only a merged PR from this reserved branch in this repository starts automatic publication. Closing a PR without merging it, merging an ordinary PR, or merging a fork PR does not publish an app. Pushes to `main` only prepare Release PRs and do not access Apple credentials.
-
-The publication job checks out the Release PR's merge commit, not a moving branch. It rejects the release if current `origin/main` no longer matches that commit. Review current `main` and use manual dispatch to retry from that revision. Existing tag and GitHub Release checks still apply.
-
-The release operator must validate the first automatic run with configured credentials. Local event tests do not verify GitHub event delivery, environment rules, signing, notarization, or publication.
-
-### Manual publication
-
-Use manual dispatch for a locally prepared version, a Release PR merged before automatic publication was enabled, or a failed automatic run:
-
-1. Open **GitHub > Actions > Release**.
-2. Choose **Run workflow** from `main`.
-3. Approve the `release` environment deployment if protection rules require it.
-
-A manual run starts only the signing and publication job and checks out the commit selected at dispatch. The jobs use separate concurrency groups, so PR updates do not block publication.
-
-The publication job:
-
-1. Reads the version prepared by changenote and rejects an invalid version, missing release notes, or an existing tag or release.
-2. Runs unit tests without live display changes.
-3. Imports the Developer ID identity into an ephemeral keychain.
-4. Archives and exports a universal Release app with deterministic Developer ID signing.
-5. Submits the app to Apple notarization and waits for acceptance.
-6. Staples the ticket and verifies the version, build, architectures, signature, signing team, and Gatekeeper result.
-7. Creates the ZIP, SHA-256 checksum, and local commit sidecar after checking that `HEAD` and the working tree have not changed during packaging.
-8. Verifies that the sidecar matches `HEAD` and current `origin/main`, creates an annotated tag, uploads the ZIP and checksum to a draft GitHub Release, validates its two assets, and makes it public.
-
-Automated tags are annotated but not cryptographically signed because GitHub Actions does not use a maintainer's local signing key. Local publication creates a signed tag.
-
-## Local setup
-
-1. Join the Apple Developer Program for team `A4YQL6FFTK`.
-2. In **Xcode > Settings > Accounts**, select the team, open **Manage Certificates**, and create or install a **Developer ID Application** certificate.
-3. Create an app-specific password for the Apple ID used for notarization.
-4. Save the credentials to the login keychain. Run this directly in a terminal so the password is entered only at the secure prompt:
-
-   ```sh
-   xcrun notarytool store-credentials display-loom-notary \
-     --apple-id "APPLE_ID" \
-     --team-id A4YQL6FFTK
-   ```
-
-5. Verify the setup without printing secrets:
-
-   ```sh
-   security find-identity -v -p codesigning | grep "Developer ID Application"
-   xcrun notarytool history --keychain-profile display-loom-notary
-   ```
-
-To use another keychain profile or team, set `NOTARY_PROFILE`, `NOTARY_KEYCHAIN`, or `DEVELOPMENT_TEAM` when running the packaging command.
-
-## Run a local release
-
-After preparing the version on a clean, synchronized `main`, run:
+With full Xcode installed, use a clean `main` checkout or a detached release commit that belongs to `origin/main`:
 
 ```sh
 just test
 just package-release 0.2.0
 ```
 
-`package-release` creates these files after all signing, notarization, and Gatekeeper checks pass:
+The supplied version must match `Configuration/Version.xcconfig`. Packaging creates:
 
-- `.release/Display-Loom-<version>.zip`
-- `.release/Display-Loom-<version>.zip.sha256`
-- `.release/Display-Loom-<version>.zip.commit`
+- `.release/Display-Loom-<version>.dmg`
+- `.release/Display-Loom-<version>.dmg.sha256`
+- `.release/Display-Loom-<version>.dmg.commit`
 
-The `.commit` sidecar records the full source `HEAD` captured before packaging. Packaging rechecks `HEAD` and the clean working tree before writing the sidecar. If either changed, packaging fails without a valid sidecar. Do not modify these files; rebuild them instead.
+The DMG contains `Display Loom.app` and an `Applications` shortcut. The `.commit` sidecar records the source `HEAD`. Packaging rechecks `HEAD` and the clean working tree before writing it. Do not modify checksums or sidecars to reuse an old image; rebuild from the intended commit.
 
-Publication requires the recorded commit to match `HEAD`, requires `HEAD` to match current `origin/main`, and verifies the ZIP checksum before creating a tag or writing to GitHub. A missing or stale sidecar blocks publication even when the version and checksum still match. Repackage from the intended commit; do not copy or edit a sidecar to reuse an old ZIP. Only the ZIP and checksum are public release assets.
-
-Review the artifact and release notes before explicitly confirming publication:
+Use the GitHub workflow for version publication and tag creation. The local upload command only attaches assets to an existing, non-draft Release whose remote tag points to the packaging commit:
 
 ```sh
-changenote release-notes --package display-loom --version 0.2.0
 CONFIRM_PUBLISH=v0.2.0 just publish-release 0.2.0
 ```
 
-The publication script extracts this changelog entry into `.release/release-notes.md` before it creates a tag. A missing, duplicate, or empty version entry stops publication. Signing, notarization, Gatekeeper checks, and public release publication still require the existing macOS workflow or local credentials; Release PR automation does not verify them.
+It requires GitHub CLI authentication and does not create a tag or Release. Git tag signing and app code signing are separate: the workflow creates annotated tags, and the app has only an ad-hoc signature.
 
-## Performance change validation
+## Local checks
 
-The display performance changes have deterministic checks in `just test-performance`. The backend and store check functions also have XCTest wrappers. The bridge fake checks run as a separate executable. These checks use production code with injected operations; they do not change the host's display configuration.
-
-Available evidence:
-
-- With Xcode 26.6 at `/Applications/Xcode.app`, `just build`, `just test`, and `just build-release` passed for the review-finding implementation. XCTest reported 84 tests, with the live test skipped and zero failures. The unsigned Release build includes arm64 and x86_64. These results do not verify signing or notarization.
-- `just lint` passed strict Swift Format and SwiftLint checks with zero SwiftLint violations across 29 files.
-- `just test-performance` passed 15 backend/worker checks and 13 store/service groups, plus nine fake initializer ownership cases and three mirror mode guards. These checks do not change live displays.
-- `just test-release` passed nine changenote integration checks and 16 mocked release safety tests, including 13 event cases, stale-commit rejection, and shell syntax checks. The combined suite preserves the separate workflow jobs and validates commit provenance. No real release operations ran.
-- With four unchanged profiles, 100 notifications produce one source scan, zero restore calls, and zero `objectWillChange` notifications. The baseline at `a7d259d` produced 100 scans, 400 restore attempts, and 1,000 publisher notifications. Publisher counts are not measured SwiftUI renders.
-- Gated operations verify registration yielding, a monotonic two-second registration deadline, cancellation and late-handle cleanup, serialized invalidation, and worker-side mirror checks before mode changes.
-- Store/service checks verify main-actor availability, merged updates during suspended work, failure feedback suppression, in-flight wake and topology recovery, stale-result rejection, replacement ordering, teardown, saved intent, and resolution error handling. Mode checks compare saved and applied resolutions, including an older successful write followed by a newer failed write.
-- Earlier Command Line Tools checks compiled production Swift and Objective-C for the native arm64 macOS 14 target with warnings treated as errors. Intel x86_64 Swift type-checking and Objective-C syntax checks for the same deployment target also passed. Those checks were not a full application build or a compatibility test on macOS 14 hardware. Public SDK headers do not require these configuration writes to run on the main thread; private API threading remains undocumented. Configuration callbacks must only schedule recovery, not perform configuration writes inline.
-
-The following external checks remain unverified:
-
-1. **Live display behavior and latency**
-   - Responsible role: maintainer who can safely change the host's display configuration.
-   - Prerequisite: a successful full build, a recoverable test setup, and explicit approval for display changes.
-   - Action: after explicit approval, run `just test-live`; check multiple displays, a virtual display used as a mirror primary, rapid source changes, disconnect/reconnect during pending work, source reconnection, and sleep/wake. Capture a main-thread trace during mirror changes. Use macOS 14 and a current supported macOS version where available, and record missing OS/device coverage.
-   - Expected result: saved mirror intent and recovery remain correct, stale operations do not change the final selection, and mirror transactions do not occupy the main thread.
-   - Unverified behavior: private API compatibility, real display recovery, menu responsiveness, and system latency have not been established by test doubles.
-   - Release restriction: observed safety or recovery failures block release. Do not claim measured latency gains or complete live-display validation without this evidence.
-
-2. **Real release validation**
-   - Responsible role: release operator with configured Developer ID and notarization credentials.
-   - Prerequisite: a separately approved release and successful build and display-safe checks for the release revision.
-   - Action: run the signing, notarization, Gatekeeper, and publication steps through the documented workflow or local release process.
-   - Expected result: a signed and notarized universal app, a tag at its recorded source commit, and a public release with exactly the ZIP and checksum assets.
-   - Release restriction: real signing, notarization, and workflow execution were not tested in this work. Unsigned builds and mocked release checks do not establish release readiness.
-
-## Release tooling checks
-
-With the pinned changenote CLI, XcodeGen, and uv installed, run:
+With the matching changenote CLI, XcodeGen, and uv installed:
 
 ```sh
 just test-release
 ```
 
-The recipe runs both release test suites:
+The suites use temporary fixtures:
 
-- `scripts/test-changenote.py` verifies version updates, note consumption, changelog extraction, generated-project stability, workflow event routing, and publication guards with temporary files and mocked Git and GitHub commands. Event cases cover main and branch dispatches, pushes, merged Release PRs, ordinary PRs, fork PRs, other base branches, and unmerged or updated PRs. The checkout check requires the triggering merge commit or dispatch commit.
-- `scripts/tests/test_release.py` runs copies of the actual release scripts and the workflow certificate import and cleanup shell blocks. All external commands in this suite are mocked. It covers matching and stale commits, missing or empty provenance, checksum mismatch, source changes during packaging, and cleanup after import or identity validation failure. Rejected publication checks verify that no tag, push, or GitHub Release write is attempted. The suite also checks shell syntax for both scripts and every workflow shell step.
+- `scripts/test-changenote.py` checks version updates, changelog extraction, generated-project stability, workflow routing, release-range checks, and downloaded-artifact verification.
+- `scripts/tests/test_release.py` runs the packaging and upload scripts with a mock-only `PATH`. It checks ad-hoc packaging, architecture and bundle metadata, provenance, checksum rejection, remote conflicts, immutable assets, retries, and shell syntax.
 
-These checks do not sign apps, change keychains or displays, or create remote tags or Releases. The real GitHub workflow is not tested in this work. A release operator must validate signing, notarization, and publication with configured credentials during a separately approved release.
+These tests do not create real tags or Releases, access Apple credentials, or change displays. A local package check can build and sign a disposable app and verify its DMG without launching the app. This does not establish hosted workflow behavior, Gatekeeper trust, or live-display compatibility.
 
-## Recovery
+### Migration verification
 
-Before publication, delete `.release/` and rebuild. If a failed workflow or local publication created remote state, delete its draft GitHub Release and remote tag before retrying. If a public release may already have been downloaded, do not reuse its version; publish a patch version instead.
+Local checks passed with Xcode 27.2 and the matching changenote 0.10.0 CLI:
+
+- 14 changenote/workflow tests and 42 mocked packaging/upload tests.
+- 84 XCTest tests, with one live-display test skipped and no failures.
+- Display-safe performance checks, strict Swift lint, Actionlint 1.7.12, ShellCheck, and `git diff --check`.
+- A disposable build produced a real universal DMG. A read-only mount confirmed the app, Applications shortcut, ad-hoc signature, hardened runtime, sandbox entitlements, both architectures, checksum, and commit sidecar. The packaged app was not launched.
+
+No remote tag, GitHub Release, or asset was created during these checks. Hosted validation remains an external task below.
+
+## Display-safe performance checks
+
+The existing display regression checks remain separate from release tooling:
+
+```sh
+just test-performance
+just lint
+```
+
+The backend and store checks also have XCTest wrappers. Native bridge checks use fake runtime/display operations. They cover serialized display writes, cancellation and late-handle cleanup, registration deadlines, worker-side mirror guards, notification coalescing, saved mirror intent, stale results, teardown, and resolution ordering. They do not change the host's display configuration or measure real display latency.
+
+Earlier validation recorded 84 XCTest tests with the live test skipped, a universal unsigned Release build, strict Swift lint checks, 15 backend/worker checks, 13 store/service groups, nine fake initializer ownership cases, and three mirror mode guards. These are historical results, not evidence that the new GitHub workflow has run.
+
+## External validation
+
+1. **Hosted release workflow**
+   - Responsible role: repository owner or release maintainer.
+   - Prerequisite: the workflow changes are merged and the GitHub settings above are enabled.
+   - Action: merge a generated version PR, inspect the tag's source commit and Release notes, and confirm that exactly the DMG and checksum are attached. Download and verify the checksum, mount the DMG, and inspect its app and Applications shortcut.
+   - Expected result: a universal, ad-hoc-signed app from the verified release commit; no Apple credentials are requested.
+   - Unverified behavior: hosted event delivery, permissions, branch rules, artifact transfer, and public upload are not established by local mocks.
+   - Release restriction: do not claim notarization, Developer ID trust, Gatekeeper acceptance, or a successful hosted release without corresponding evidence.
+
+2. **Live display behavior and latency**
+   - Responsible role: maintainer who can safely change the host's display configuration.
+   - Prerequisite: a successful full build, a recoverable test setup, and explicit approval for display changes.
+   - Action: after approval, run `just test-live`; check multiple displays, a virtual display used as a mirror primary, rapid source changes, disconnect/reconnect during pending work, source reconnection, and sleep/wake. Use macOS 14 and a current supported version where available, and record missing OS/device coverage.
+   - Expected result: saved mirror intent and recovery remain correct, stale operations do not change the final selection, and mirror transactions do not occupy the main thread.
+   - Unverified behavior: private API compatibility, real display recovery, menu responsiveness, and system latency are not established by test doubles.
+   - Release restriction: observed safety or recovery failures block release. Do not claim measured latency gains or complete live-display validation without this evidence.
+
+## Rollback
+
+Before publication, restore the previous workflow and scripts if needed. Do not edit committed release batches or move published tags. Resolve remote conflicts explicitly rather than deleting public artifacts automatically. Once a release has been downloaded, use a new patch version for corrections.

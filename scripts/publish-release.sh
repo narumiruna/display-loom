@@ -15,25 +15,21 @@ fail() {
 
 version="$1"
 tag="v$version"
-tag_mode="${RELEASE_TAG_MODE:-signed}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 release_dir="$root/.release"
-artifact_name="Display-Loom-${version}.zip"
+artifact_name="Display-Loom-${version}.dmg"
 artifact_path="$release_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
 provenance_path="$artifact_path.commit"
-notes_path="$release_dir/release-notes.md"
 
 cd "$root"
 
-for command in git gh shasum changenote; do
+for command in git gh jq shasum cmp mktemp rm awk; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must use MAJOR.MINOR.PATCH format"
 [[ "${CONFIRM_PUBLISH:-}" == "$tag" ]] || fail "set CONFIRM_PUBLISH=$tag to confirm public publication"
-[[ "$tag_mode" == "signed" || "$tag_mode" == "annotated" ]] \
-  || fail "RELEASE_TAG_MODE must be signed or annotated"
 current_branch="$(git branch --show-current)"
 [[ -z "$current_branch" || "$current_branch" == "main" ]] || fail "release must be published from main"
 [[ -z "$(git status --porcelain)" ]] || fail "working tree must be clean"
@@ -47,49 +43,71 @@ project_version="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit 
 head_commit="$(git rev-parse HEAD)"
 [[ "$(<"$provenance_path")" == "$head_commit" ]] \
   || fail "release artifact was not packaged from HEAD; rebuild the release"
-
 (
   cd "$release_dir"
-  shasum -a 256 -c "$artifact_name.sha256"
+  expected_checksum="$(shasum -a 256 "$artifact_name")"
+  [[ "$(<"$artifact_name.sha256")" == "$expected_checksum" ]] \
+    || fail "checksum verification failed for $artifact_name; restore the original packaged files"
 )
 
-changenote release-notes --package display-loom --version "$version" >"$notes_path"
-[[ -s "$notes_path" ]] || fail "release notes are empty: $notes_path"
+git fetch --quiet origin main
+[[ "$(git rev-parse HEAD)" == "$head_commit" ]] || fail "HEAD changed during publication; retry from the packaging commit"
+[[ -z "$(git status --porcelain)" ]] || fail "working tree changed during publication"
+git merge-base --is-ancestor "$head_commit" refs/remotes/origin/main \
+  || fail "HEAD must be an ancestor of origin/main"
 
-git fetch --quiet origin main --tags
-[[ "$(git rev-parse HEAD)" == "$head_commit" ]] || fail "HEAD changed during publication; rerun from the packaging commit"
-[[ "$head_commit" == "$(git rev-parse refs/remotes/origin/main)" ]] || fail "main must match origin/main"
-
-if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then
-  fail "local tag already exists: $tag"
-fi
 remote_tag="$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")" \
-  || fail "could not check remote tag: $tag"
-[[ -z "$remote_tag" ]] || fail "remote tag already exists: $tag"
-if gh release view "$tag" >/dev/null 2>&1; then
-  fail "GitHub Release already exists: $tag"
+  || fail "could not check remote tag: $tag; retry publication"
+tag_commit=""
+peeled_commit=""
+while read -r commit ref; do
+  case "$ref" in
+    "refs/tags/$tag") tag_commit="$commit" ;;
+    "refs/tags/$tag^{}") peeled_commit="$commit" ;;
+  esac
+done <<<"$remote_tag"
+[[ "${peeled_commit:-$tag_commit}" == "$head_commit" ]] \
+  || fail "remote tag $tag does not point to HEAD; publish the release for the selected commit first"
+
+release_json="$(gh release view "$tag" --json isDraft,assets,url)" \
+  || fail "could not read GitHub Release $tag; check access and publish the release before retrying"
+jq -e '.isDraft == false' <<<"$release_json" >/dev/null \
+  || fail "GitHub Release $tag must exist and must not be a draft"
+
+validate_assets() {
+  jq -e --arg artifact "$artifact_name" --arg checksum "$artifact_name.sha256" '
+    (.assets | type == "array") and
+    all(.assets[]; .name == $artifact or .name == $checksum) and
+    (([.assets[].name] | unique | length) == (.assets | length))
+  ' <<<"$1" >/dev/null \
+    || fail "GitHub Release $tag has unexpected or duplicate assets; expected only $artifact_name and $artifact_name.sha256"
+}
+validate_assets "$release_json"
+
+comparison_dir="$(mktemp -d "$release_dir/publish.XXXXXX")"
+trap 'rm -rf "$comparison_dir"' EXIT
+missing_assets=()
+for asset_path in "$artifact_path" "$checksum_path"; do
+  asset_name="${asset_path##*/}"
+  if jq -e --arg name "$asset_name" 'any(.assets[]; .name == $name)' <<<"$release_json" >/dev/null; then
+    gh release download "$tag" --pattern "$asset_name" --dir "$comparison_dir" \
+      || fail "could not download existing asset $asset_name; retry publication without replacing assets"
+    cmp -s "$asset_path" "$comparison_dir/$asset_name" \
+      || fail "existing asset $asset_name differs; retry with the original packaged files, not a rebuild. Published assets must not be replaced"
+  else
+    missing_assets+=("$asset_path")
+  fi
+done
+
+[[ "$(git rev-parse HEAD)" == "$head_commit" ]] || fail "HEAD changed during publication; retry from the packaging commit"
+[[ -z "$(git status --porcelain)" ]] || fail "working tree changed during publication"
+if [[ ${#missing_assets[@]} -gt 0 ]]; then
+  gh release upload "$tag" "${missing_assets[@]}"
 fi
 
-if [[ "$tag_mode" == "signed" ]]; then
-  git tag -s "$tag" -m "Display Loom $version" "$head_commit"
-else
-  git tag -a "$tag" -m "Display Loom $version" "$head_commit"
-fi
-git push origin "refs/tags/$tag"
-remote_tag_commit="$(git ls-remote origin "refs/tags/$tag^{}" | awk '{ print $1 }')"
-[[ "$remote_tag_commit" == "$head_commit" ]] || fail "$tag does not point to the expected remote commit"
-
-gh release create "$tag" \
-  "$artifact_path" \
-  "$checksum_path" \
-  --draft \
-  --verify-tag \
-  --title "Display Loom $version" \
-  --notes-file "$notes_path"
-
-asset_count="$(gh release view "$tag" --json assets --jq '.assets | length')"
-[[ "$asset_count" == "2" ]] || fail "draft release has $asset_count assets, expected 2"
-
-gh release edit "$tag" --draft=false --latest
-
-gh release view "$tag" --json url --jq '.url'
+release_json="$(gh release view "$tag" --json isDraft,assets,url)" \
+  || fail "could not verify GitHub Release $tag; retry publication with the same packaged files"
+validate_assets "$release_json"
+jq -e '.isDraft == false and (.assets | length == 2)' <<<"$release_json" >/dev/null \
+  || fail "GitHub Release $tag must be non-draft with exactly two assets; retry publication with the same packaged files"
+jq -r '.url' <<<"$release_json"
