@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+### Patch Changes
+
+- Distribute universal DMG packages through GitHub Releases without Apple signing credentials. Version PRs, tags, and release notes are managed by changenote.
+
 ## 0.1.1
 
 ### Patch Changes
