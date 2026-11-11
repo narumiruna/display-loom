@@ -12,7 +12,18 @@ Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. D
 
 ## Install
 
-Download the universal DMG from the [latest GitHub Release](https://github.com/narumiruna/display-loom/releases/latest), open it, and drag **Display Loom.app** to **Applications**.
+Download both `Display-Loom-<version>.dmg` and `Display-Loom-<version>.dmg.sha256` from the same [GitHub Release](https://github.com/narumiruna/display-loom/releases/latest). Save both files in the same directory.
+
+Open Terminal and replace `<version>` below with the version in the downloaded filenames. If you saved the files outside **Downloads**, change the directory path too.
+
+```sh
+cd "$HOME/Downloads"
+shasum -a 256 -c "Display-Loom-<version>.dmg.sha256"
+```
+
+Continue only if the command succeeds and prints `Display-Loom-<version>.dmg: OK`. If the check fails, stop. Do not open the DMG or use **Open Anyway**. Download both files again from the same official Release.
+
+After verification, open the DMG and drag **Display Loom.app** to **Applications**. A matching checksum checks file integrity; it does not verify the publisher.
 
 These builds use ad-hoc signing, not Developer ID signing or Apple notarization. Gatekeeper can block downloaded copies.
 
