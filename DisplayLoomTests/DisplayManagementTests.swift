@@ -590,7 +590,19 @@ final class DisplayManagementTests: XCTestCase {
     let connection = try XCTUnwrap(environment.backend.connections[profile.id])
     let resolution = ResolutionPreset.preset(withID: "2560x1440")!
     let applied = expectation(description: "The native choice reaches the fake backend")
-    environment.backend.beforeResolution = { applied.fulfill() }
+    var pendingWrite: CheckedContinuation<Void, Never>?
+    environment.backend.beforeResolution = {
+      await withCheckedContinuation {
+        pendingWrite = $0
+        applied.fulfill()
+      }
+    }
+    defer {
+      let pending = pendingWrite
+      pendingWrite = nil
+      pending?.resume()
+      environment.backend.beforeResolution = nil
+    }
     let actions = DisplayActions(
       store: environment.store,
       confirm8K: {
@@ -608,7 +620,12 @@ final class DisplayManagementTests: XCTestCase {
     await fulfillment(of: [applied], timeout: 2)
 
     try await assertNativeResolution(resolution, in: control, hostedBy: host)
-    XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, resolution.id)
+    Task {
+      let pending = pendingWrite
+      pendingWrite = nil
+      pending?.resume()
+    }
+    try await assertStoredResolution(resolution, for: profile, in: environment.store)
     XCTAssertEqual(environment.repository.state.profiles, environment.store.profiles)
     XCTAssertEqual(environment.backend.resolutionRequests.map(\.0), [resolution.id])
     XCTAssertEqual(environment.backend.resolutionRequests.map(\.1), [connection.displayID])
@@ -641,7 +658,7 @@ final class DisplayManagementTests: XCTestCase {
 
     try selectNativeResolution(nativeChoice, in: control)
     try await assertNativeResolution(nativeChoice, in: control, hostedBy: host)
-    XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, nativeChoice.id)
+    try await assertStoredResolution(nativeChoice, for: profile, in: environment.store)
 
     await environment.store.setResolution(laterChoice, for: profile.id)
 
@@ -683,7 +700,7 @@ final class DisplayManagementTests: XCTestCase {
     XCTAssertEqual(confirmationCount, 1)
     XCTAssertFalse(environment.store.needs8KWarning(for: eightK))
     XCTAssertTrue(environment.repository.state.hasAcknowledged8KWarning)
-    XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, eightK.id)
+    try await assertStoredResolution(eightK, for: profile, in: environment.store)
     XCTAssertEqual(environment.repository.state.profiles, environment.store.profiles)
     XCTAssertEqual(environment.backend.resolutionRequests.map(\.0), [eightK.id])
     XCTAssertEqual(environment.backend.resolutionRequests.map(\.1), [connection.displayID])
@@ -757,7 +774,7 @@ final class DisplayManagementTests: XCTestCase {
     secondWaiter = nil
 
     try await assertNativeResolution(newestChoice, in: control, hostedBy: host)
-    XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, newestChoice.id)
+    try await assertStoredResolution(newestChoice, for: profile, in: environment.store)
     XCTAssertEqual(environment.repository.state.profiles, environment.store.profiles)
     XCTAssertEqual(
       environment.backend.resolutionRequests.map(\.0),
@@ -766,6 +783,119 @@ final class DisplayManagementTests: XCTestCase {
     XCTAssertEqual(environment.backend.appliedResolutionIDs[connection.displayID], newestChoice.id)
     XCTAssertEqual(requestCount, 2)
     XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testRejectedNativeMirrorSourceRestoresActualSelection() async throws {
+    try await assertRejectedNativeMirrorChoice(stopMirroring: false)
+  }
+
+  func testRejectedNativeMirrorStopRestoresActualSelection() async throws {
+    try await assertRejectedNativeMirrorChoice(stopMirroring: true)
+  }
+
+  func testRejectedNativeMirrorStartRestoresUnmirroredSelection() async throws {
+    try await assertRejectedNativeMirrorChoice(stopMirroring: false, startsMirrored: false)
+  }
+
+  private func assertRejectedNativeMirrorChoice(
+    stopMirroring: Bool,
+    startsMirrored: Bool = true,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws {
+    let environment = VirtualDisplayTestEnvironment()
+    let originalSource = makeMirrorSource()
+    let otherSource = DisplayMirrorSource(id: UUID(), name: "Other Display")
+    environment.mirroringManager.sources = [originalSource, otherSource]
+    await environment.store.addDisplay(resolution: DisplayActions.recommendedResolution)
+    let profileID = try XCTUnwrap(environment.store.profiles.first?.id)
+    if startsMirrored {
+      await environment.store.setMirrorSource(originalSource.id, for: profileID)
+    }
+    let expectedSource = startsMirrored ? originalSource : nil
+    let profile = try XCTUnwrap(environment.store.profile(id: profileID))
+    let savedState = environment.repository.state
+    let error = DisplayMirroringError.configurationFailed(1)
+    environment.mirroringManager.setMirrorError = error
+    let rejected = expectation(description: "The native mirror request is rejected")
+    var errors: [String] = []
+    let actions = DisplayActions(
+      store: environment.store,
+      showError: {
+        errors.append($0)
+        rejected.fulfill()
+      }
+    )
+    let (host, control) = try makeNativeMirrorControl(
+      store: environment.store,
+      actions: actions,
+      including: originalSource
+    )
+
+    try selectNativeMirrorSource(stopMirroring ? nil : otherSource, in: control)
+    await fulfillment(of: [rejected], timeout: 2)
+
+    try await assertNativeMirrorSource(
+      expectedSource,
+      in: control,
+      hostedBy: host,
+      file: file,
+      line: line
+    )
+    XCTAssertEqual(errors, [error.localizedDescription], file: file, line: line)
+    XCTAssertEqual(environment.store.profile(id: profileID), profile, file: file, line: line)
+    XCTAssertEqual(environment.repository.state, savedState, file: file, line: line)
+    XCTAssertEqual(
+      environment.store.activeMirrorSourceIDs[profileID],
+      expectedSource?.id,
+      file: file,
+      line: line
+    )
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty, file: file, line: line)
+  }
+
+  private func makeNativeMirrorControl(
+    store: VirtualDisplayStore,
+    actions: DisplayActions,
+    including source: DisplayMirrorSource
+  ) throws -> (NSHostingView<DisplayManagerView>, NSPopUpButton) {
+    let host = NSHostingView(rootView: DisplayManagerView(store: store, actions: actions))
+    host.frame = NSRect(x: 0, y: 0, width: 760, height: 640)
+    host.layoutSubtreeIfNeeded()
+    let control = try XCTUnwrap(
+      nativePopUpButtons(in: host).first { $0.itemTitles.contains(source.name) }
+    )
+    return (host, control)
+  }
+
+  private func selectNativeMirrorSource(
+    _ source: DisplayMirrorSource?,
+    in control: NSPopUpButton
+  ) throws {
+    let title = source?.name ?? String(localized: "menu.mirrorNone", defaultValue: "Do Not Mirror")
+    let menu = try XCTUnwrap(control.menu)
+    let item = try XCTUnwrap(control.item(withTitle: title))
+    let cell = try XCTUnwrap(control.cell as? NSPopUpButtonCell)
+    cell.select(item)
+    menu.performActionForItem(at: menu.index(of: item))
+  }
+
+  private func assertNativeMirrorSource(
+    _ source: DisplayMirrorSource?,
+    in control: NSPopUpButton,
+    hostedBy host: NSHostingView<DisplayManagerView>,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws {
+    let title = source?.name ?? String(localized: "menu.mirrorNone", defaultValue: "Do Not Mirror")
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    repeat {
+      try await Task.sleep(for: .milliseconds(10))
+      host.layoutSubtreeIfNeeded()
+      if control.selectedItem?.title == title, control.title == title { return }
+    } while ContinuousClock.now < deadline
+    XCTAssertEqual(control.selectedItem?.title, title, file: file, line: line)
+    XCTAssertEqual(control.title, title, file: file, line: line)
   }
 
   private func makeNativeResolutionControl(
@@ -792,6 +922,26 @@ final class DisplayManagementTests: XCTestCase {
     let cell = try XCTUnwrap(control.cell as? NSPopUpButtonCell)
     cell.select(item)
     menu.performActionForItem(at: menu.index(of: item))
+  }
+
+  private func assertStoredResolution(
+    _ resolution: ResolutionPreset,
+    for profile: VirtualDisplayProfile,
+    in store: VirtualDisplayStore,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    repeat {
+      if store.profile(id: profile.id)?.resolutionID == resolution.id { return }
+      try await Task.sleep(for: .milliseconds(10))
+    } while ContinuousClock.now < deadline
+    XCTAssertEqual(
+      store.profile(id: profile.id)?.resolutionID,
+      resolution.id,
+      file: file,
+      line: line
+    )
   }
 
   private func assertNativeResolution(
