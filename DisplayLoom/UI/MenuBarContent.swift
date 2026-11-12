@@ -4,9 +4,20 @@ import SwiftUI
 
 struct MenuBarContent: View {
   @ObservedObject var store: VirtualDisplayStore
+  @Environment(\.openWindow) private var openWindow
+
+  private var actions: DisplayActions { DisplayActions(store: store) }
 
   var body: some View {
     Group {
+      Button("menu.openWindow") {
+        openWindow(id: DisplayManagerView.windowID)
+        NSApp.activate(ignoringOtherApps: true)
+      }
+      .keyboardShortcut("0")
+
+      Divider()
+
       if case .unavailable(let reason) = store.backendAvailability {
         Text(reason)
       }
@@ -27,7 +38,7 @@ struct MenuBarContent: View {
         "menu.launchAtLogin",
         isOn: Binding(
           get: { store.launchAtLoginStatus == .enabled },
-          set: updateLaunchAtLogin
+          set: actions.updateLaunchAtLogin
         )
       )
       .disabled(store.launchAtLoginStatus == .unavailable)
@@ -45,7 +56,7 @@ struct MenuBarContent: View {
       .keyboardShortcut("q")
     }
     .onAppear {
-      presentPendingMessages()
+      actions.presentPendingMessages()
     }
   }
 
@@ -59,7 +70,7 @@ struct MenuBarContent: View {
         if state.isConnected || state.isBusy {
           Button(
             action: {
-              Task { await store.disconnectProfile(id: profile.id) }
+              Task { await actions.disconnect(profile) }
             },
             label: {
               Label("menu.disconnect", systemImage: "stop.circle")
@@ -69,10 +80,7 @@ struct MenuBarContent: View {
         } else {
           Button(
             action: {
-              Task {
-                await store.connectProfile(id: profile.id)
-                presentStoreErrorIfNeeded()
-              }
+              Task { await actions.connect(profile) }
             },
             label: {
               Label("menu.connect", systemImage: "play.circle")
@@ -87,11 +95,7 @@ struct MenuBarContent: View {
 
         Button(
           action: {
-            guard let name = DialogPresenter.requestName(currentName: profile.name) else { return }
-            Task {
-              await store.renameProfile(id: profile.id, to: name)
-              presentStoreErrorIfNeeded()
-            }
+            Task { await actions.rename(profile) }
           },
           label: {
             Label("menu.rename", systemImage: "pencil")
@@ -102,8 +106,7 @@ struct MenuBarContent: View {
         Button(
           role: .destructive,
           action: {
-            guard DialogPresenter.confirmRemoval(name: profile.name) else { return }
-            Task { await store.removeProfile(id: profile.id) }
+            Task { await actions.remove(profile) }
           },
           label: {
             Label("menu.remove", systemImage: "trash")
@@ -132,10 +135,7 @@ struct MenuBarContent: View {
       content: {
         Button(
           action: {
-            Task {
-              await store.setMirrorSource(nil, for: profile.id)
-              presentStoreErrorIfNeeded()
-            }
+            Task { await actions.setMirrorSource(nil, for: profile.id) }
           },
           label: {
             if activeSourceID == nil {
@@ -163,10 +163,7 @@ struct MenuBarContent: View {
           ForEach(store.mirrorSources) { source in
             Button(
               action: {
-                Task {
-                  await store.setMirrorSource(source.id, for: profile.id)
-                  presentStoreErrorIfNeeded()
-                }
+                Task { await actions.setMirrorSource(source.id, for: profile.id) }
               },
               label: {
                 if activeSourceID == source.id {
@@ -197,7 +194,7 @@ struct MenuBarContent: View {
             ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
               Button(
                 action: {
-                  selectResolution(preset, for: profile.id)
+                  Task { await actions.selectResolution(preset, for: profile.id) }
                 },
                 label: {
                   if profile.resolutionID == preset.id {
@@ -231,7 +228,7 @@ struct MenuBarContent: View {
   private var addDisplayControls: some View {
     Button(
       action: {
-        addDisplay(Self.recommendedResolution)
+        Task { await actions.addDisplay(DisplayActions.recommendedResolution) }
       },
       label: {
         Label("menu.addDisplay", systemImage: "plus")
@@ -245,7 +242,7 @@ struct MenuBarContent: View {
           Menu(aspectRatio.localizedName) {
             ForEach(ResolutionPreset.presets(for: aspectRatio)) { preset in
               Button(preset.displayName) {
-                addDisplay(preset)
+                Task { await actions.addDisplay(preset) }
               }
             }
           }
@@ -256,49 +253,6 @@ struct MenuBarContent: View {
       }
     )
     .disabled(!store.backendAvailability.isAvailable)
-  }
-
-  private func addDisplay(_ resolution: ResolutionPreset) {
-    guard approve8KIfNeeded(resolution) else { return }
-    Task {
-      await store.addDisplay(resolution: resolution)
-      presentStoreErrorIfNeeded()
-    }
-  }
-
-  private func selectResolution(_ resolution: ResolutionPreset, for profileID: UUID) {
-    guard approve8KIfNeeded(resolution) else { return }
-    Task {
-      await store.setResolution(resolution, for: profileID)
-      presentStoreErrorIfNeeded()
-    }
-  }
-
-  private func approve8KIfNeeded(_ resolution: ResolutionPreset) -> Bool {
-    guard store.needs8KWarning(for: resolution) else { return true }
-    guard DialogPresenter.confirm8K() else { return false }
-    store.acknowledge8KWarning()
-    return true
-  }
-
-  private func updateLaunchAtLogin(_ enabled: Bool) {
-    store.setLaunchAtLoginEnabled(enabled)
-    presentPendingMessages()
-  }
-
-  private func presentPendingMessages() {
-    if store.shouldShowLaunchAtLoginApproval {
-      DialogPresenter.showLaunchAtLoginApproval {
-        store.openLoginItemSettings()
-      }
-      store.clearLaunchAtLoginApprovalNotice()
-    }
-    presentStoreErrorIfNeeded()
-  }
-
-  private func presentStoreErrorIfNeeded() {
-    guard let message = store.takeLastErrorMessage() else { return }
-    DialogPresenter.showError(message)
   }
 
   @ViewBuilder
@@ -317,12 +271,6 @@ struct MenuBarContent: View {
       EmptyView()
     }
   }
-
-  private static let recommendedResolution = ResolutionPreset(
-    width: 1_920,
-    height: 1_080,
-    aspectRatio: .sixteenByNine
-  )
 
   private func statusSymbol(for state: DisplayConnectionState) -> String {
     switch state {

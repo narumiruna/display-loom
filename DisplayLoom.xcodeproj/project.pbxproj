@@ -44,6 +44,9 @@
 		F2FE537F63BE851F97A08FEC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C6D33218D187D8D0C0D490C8 /* Assets.xcassets */; };
 		FD8E37B8E92894BEECE81B66 /* VirtualDisplayBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E8499D2842E8624980158C3 /* VirtualDisplayBackend.swift */; };
 		FF5DA59F8BBE812C3C2D9998 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6529809543E34CB72FEDAA5B /* CoreGraphics.framework */; };
+		EE076163A8EE82A11698C40B /* DisplayActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CEB52171B2CFD17648FBD93 /* DisplayActions.swift */; };
+		0E1FAB18B7ADD79E83B72D9A /* DisplayManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741F423B5592DF7A7C630485 /* DisplayManagerView.swift */; };
+		56159C42BB6C210E22D801B6 /* DisplayManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A1A95D7CEB3FDAEFC42C23 /* DisplayManagementTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +106,9 @@
 		E36756C2028A05BCF66E9CAE /* VirtualDisplayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayStore.swift; sourceTree = "<group>"; };
 		E42C55754322CD29C9B5DF79 /* Display Loom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Display Loom.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE9EC6245783192897C4EB18 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Version.xcconfig; sourceTree = "<group>"; };
+		2CEB52171B2CFD17648FBD93 /* DisplayActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayActions.swift; sourceTree = "<group>"; };
+		741F423B5592DF7A7C630485 /* DisplayManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagerView.swift; sourceTree = "<group>"; };
+		92A1A95D7CEB3FDAEFC42C23 /* DisplayManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagementTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -177,6 +183,7 @@
 			isa = PBXGroup;
 			children = (
 				472CB0CE469013F8913628E3 /* BackendPerformanceChecks.swift */,
+				92A1A95D7CEB3FDAEFC42C23 /* DisplayManagementTests.swift */,
 				B16913066B5C6321528E44B9 /* CoreGraphicsVirtualDisplayBackendTests.swift */,
 				F5698C09865CF1EB50BC0CD0 /* DisplayPerformanceTests.swift */,
 				E4A8474E15C429A3167A5E89 /* PerformanceChecks.swift */,
@@ -262,6 +269,8 @@
 			isa = PBXGroup;
 			children = (
 				9F681640B3529D82C57252C7 /* DialogPresenter.swift */,
+				2CEB52171B2CFD17648FBD93 /* DisplayActions.swift */,
+				741F423B5592DF7A7C630485 /* DisplayManagerView.swift */,
 				3AA2F342E45E606EAD74DD46 /* MenuBarContent.swift */,
 			);
 			path = UI;
@@ -365,6 +374,8 @@
 			files = (
 				148256B2611D0D073F96E9C8 /* CoreGraphicsVirtualDisplayBackend.swift in Sources */,
 				193F1108E15DED7C16871CDD /* DialogPresenter.swift in Sources */,
+				EE076163A8EE82A11698C40B /* DisplayActions.swift in Sources */,
+				0E1FAB18B7ADD79E83B72D9A /* DisplayManagerView.swift in Sources */,
 				582966FA244B9A08845BF886 /* DisplayMirroringManager.swift in Sources */,
 				ACE5813F358516684DE86FA9 /* DisplayOperationWorker.swift in Sources */,
 				3F8921F25D8F3E2ACFFA5268 /* LaunchAtLoginManager.swift in Sources */,
@@ -386,6 +397,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				228C86FB984887DA8F500D58 /* BackendPerformanceChecks.swift in Sources */,
+				56159C42BB6C210E22D801B6 /* DisplayManagementTests.swift in Sources */,
 				14EB5946D154C8F9BD08E686 /* CoreGraphicsVirtualDisplayBackendTests.swift in Sources */,
 				33EDD83DCC16EC9FBA67486F /* DisplayPerformanceTests.swift in Sources */,
 				F75A3772C696F84E9BD45027 /* PerformanceChecks.swift in Sources */,

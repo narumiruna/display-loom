@@ -43,7 +43,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        LSUIElement: true
+        LSUIElement: false
         NSHumanReadableCopyright: Copyright © 2026 Narumi
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: false

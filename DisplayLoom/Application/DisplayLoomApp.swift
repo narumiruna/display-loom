@@ -17,6 +17,12 @@ struct DisplayLoomApp: App {
   }
 
   var body: some Scene {
+    Window("Display Loom", id: DisplayManagerView.windowID) {
+      DisplayManagerView(store: store)
+    }
+    .defaultSize(width: 760, height: 560)
+    .windowResizability(.contentMinSize)
+
     MenuBarExtra(
       content: {
         MenuBarContent(store: store)

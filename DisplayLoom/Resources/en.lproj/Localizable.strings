@@ -6,6 +6,13 @@
 "display.externalName" = "External Display";
 "display.numberedName" = "%@ (%d)";
 
+"window.displays" = "Virtual Displays";
+"window.description" = "Manage virtual displays and display mirroring.";
+"window.emptyDescription" = "Add a virtual display with the + button in the toolbar.";
+"window.resolution" = "Resolution";
+"window.resolutionControlledByMirror" = "Controlled by Mirror Source";
+
+"menu.openWindow" = "Open Display Loom";
 "menu.noDisplays" = "No Virtual Displays";
 "menu.addDisplay" = "Add Virtual Display";
 "menu.addDisplayWithResolution" = "Add with Resolution…";
@@ -23,6 +30,8 @@
 "menu.about" = "About Display Loom";
 "menu.quit" = "Quit Display Loom";
 
+"status.connected" = "Connected";
+"status.disconnected" = "Disconnected";
 "status.connecting" = "Connecting…";
 "status.failed" = "Disconnected: %@";
 
