@@ -80,7 +80,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
     XCTAssertEqual(environment.store.profile(id: profileID)?.resolutionID, "1920x1080")
     XCTAssertTrue(environment.store.state(for: profileID).isConnected)
     XCTAssertEqual(
-      environment.store.takeLastErrorMessage(),
+      environment.store.takeNextErrorMessage(),
       VirtualDisplayBackendError.modeSwitchFailed.localizedDescription
     )
   }
@@ -176,7 +176,55 @@ final class VirtualDisplayStoreTests: XCTestCase {
     XCTAssertTrue(profile.desiredConnected)
     let expectedMessage = VirtualDisplayBackendError.creationFailed.localizedDescription
     XCTAssertEqual(environment.store.state(for: profile.id), .failed(message: expectedMessage))
-    XCTAssertEqual(environment.store.takeLastErrorMessage(), expectedMessage)
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), expectedMessage)
+  }
+
+  func testDistinctFailuresRemainAvailableInReportOrderUntilConsumed() async {
+    let environment = VirtualDisplayTestEnvironment()
+    let firstError = VirtualDisplayBackendError.unexpected("First connection failure")
+    let secondError = VirtualDisplayBackendError.unexpected("Second connection failure")
+    let resolution = ResolutionPreset.preset(withID: "1920x1080")!
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+    XCTAssertNil(environment.store.takeNextErrorMessage())
+
+    environment.backend.connectError = firstError
+    await environment.store.addDisplay(resolution: resolution)
+    environment.backend.connectError = secondError
+    await environment.store.addDisplay(resolution: resolution)
+
+    XCTAssertEqual(
+      environment.store.pendingErrorMessages,
+      [firstError.localizedDescription, secondError.localizedDescription]
+    )
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), firstError.localizedDescription)
+    XCTAssertEqual(environment.store.pendingErrorMessages, [secondError.localizedDescription])
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), secondError.localizedDescription)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+    XCTAssertNil(environment.store.takeNextErrorMessage())
+  }
+
+  func testIdenticalFailuresRemainAvailableUntilEachIsConsumed() async {
+    let environment = VirtualDisplayTestEnvironment()
+    let error = VirtualDisplayBackendError.creationFailed
+    environment.backend.connectError = error
+
+    await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
+    let profileID = environment.store.profiles[0].id
+    await environment.store.connectProfile(id: profileID)
+
+    XCTAssertEqual(
+      environment.store.pendingErrorMessages,
+      [error.localizedDescription, error.localizedDescription]
+    )
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), error.localizedDescription)
+    XCTAssertEqual(environment.store.pendingErrorMessages, [error.localizedDescription])
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), error.localizedDescription)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+    XCTAssertNil(environment.store.takeNextErrorMessage())
+  }
+
+  func testOverlappingOperationFailuresRemainAvailableInReportOrder() async throws {
+    try await PerformanceChecks.overlappingOperationErrors()
   }
 
   func testUnexpectedBackendErrorsArePresentedWithoutDoubleWrapping() async {
@@ -186,7 +234,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
     await environment.store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
     let profile = environment.store.profiles[0]
 
-    XCTAssertEqual(environment.store.takeLastErrorMessage(), connectionError.localizedDescription)
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), connectionError.localizedDescription)
     XCTAssertEqual(
       environment.store.state(for: profile.id),
       .failed(message: connectionError.localizedDescription)
@@ -204,7 +252,7 @@ final class VirtualDisplayStoreTests: XCTestCase {
       for: profile.id
     )
 
-    XCTAssertEqual(environment.store.takeLastErrorMessage(), resolutionError.localizedDescription)
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), resolutionError.localizedDescription)
     XCTAssertEqual(environment.repository.state, savedState)
     XCTAssertEqual(environment.store.profile(id: profile.id)?.resolutionID, "1920x1080")
     XCTAssertTrue(environment.store.state(for: profile.id).isConnected)

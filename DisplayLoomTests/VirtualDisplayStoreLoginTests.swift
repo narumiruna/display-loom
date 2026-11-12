@@ -59,9 +59,9 @@ final class VirtualDisplayStoreLoginTests: XCTestCase {
 
     await environment.store.start()
 
-    let message = try XCTUnwrap(environment.store.takeLastErrorMessage())
+    let message = try XCTUnwrap(environment.store.takeNextErrorMessage())
     XCTAssertTrue(message.contains(error.localizedDescription))
-    XCTAssertNil(environment.store.takeLastErrorMessage())
+    XCTAssertNil(environment.store.takeNextErrorMessage())
     XCTAssertEqual(environment.store.launchAtLoginStatus, .disabled)
     XCTAssertEqual(environment.loginManager.registerCallCount, 1)
     XCTAssertTrue(environment.repository.state.hasAttemptedLoginItemRegistration)
@@ -108,7 +108,7 @@ final class VirtualDisplayStoreLoginTests: XCTestCase {
 
     environment.store.setLaunchAtLoginEnabled(true)
 
-    let registrationMessage = try XCTUnwrap(environment.store.takeLastErrorMessage())
+    let registrationMessage = try XCTUnwrap(environment.store.takeNextErrorMessage())
     XCTAssertTrue(registrationMessage.contains(error.localizedDescription))
     XCTAssertEqual(environment.store.launchAtLoginStatus, .disabled)
 
@@ -116,7 +116,7 @@ final class VirtualDisplayStoreLoginTests: XCTestCase {
     environment.loginManager.unregisterError = error
     environment.store.setLaunchAtLoginEnabled(false)
 
-    let unregistrationMessage = try XCTUnwrap(environment.store.takeLastErrorMessage())
+    let unregistrationMessage = try XCTUnwrap(environment.store.takeNextErrorMessage())
     XCTAssertTrue(unregistrationMessage.contains(error.localizedDescription))
     XCTAssertEqual(environment.store.launchAtLoginStatus, .enabled)
   }

@@ -70,6 +70,8 @@ The display icon in the menu bar keeps the same controls. Choose **Open Display 
 
 Closing the window keeps Display Loom and its connected displays running. Use **Quit Display Loom** or press **Command-Q** to quit.
 
+Automatic error and login approval notices wait while another app has focus. Return to Display Loom to see pending notices.
+
 Display settings are saved. Displays left connected are restored when the app next launches.
 
 On first launch, the app attempts to enable **Launch at Login**; you can change this in the menu. macOS may require approval in **System Settings > General > Login Items**.
@@ -134,6 +136,7 @@ Before a release, check these desktop interactions manually. Unit tests check la
 2. Close the window. Confirm that the app stays running. Reopen it from the Dock and from **Open Display Loom** in the menu bar. Repeated requests must use the same window.
 3. Check the empty state and display cards in English and Traditional Chinese. Check connection controls, resolution choices, and mirroring warnings. Display operations change the real desktop configuration; use a Mac prepared for those changes.
 4. Cancel the rename, removal, and 8K dialogs from both interfaces. Confirm that saved settings do not change. Check error messages and picker state after a rejected operation.
+5. Check that a background display error does not activate Display Loom. Return to the app and confirm that each pending notice appears once.
 
 ## Change notes and releases
 

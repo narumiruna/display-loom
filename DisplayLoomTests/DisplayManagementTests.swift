@@ -38,7 +38,7 @@ final class DisplayManagementTests: XCTestCase {
     XCTAssertEqual(environment.backend.connectRequests.map(\.0.id), [profile.id])
     XCTAssertEqual(environment.backend.connectRequests.first?.1, resolution)
     XCTAssertEqual(environment.repository.state.profiles, environment.store.profiles)
-    XCTAssertNil(environment.store.lastErrorMessage)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
   }
 
   func testConnectRestoresOnlySelectedSavedProfile() async throws {
@@ -273,6 +273,235 @@ final class DisplayManagementTests: XCTestCase {
     XCTAssertEqual(environment.repository.savedStates.count, savedStateCount)
     XCTAssertEqual(environment.loginManager.registerCallCount, 0)
     XCTAssertEqual(environment.loginManager.openSettingsCallCount, 0)
+  }
+
+  func testAutomaticNoticesWaitForApplicationActivation() async {
+    let environment = VirtualDisplayTestEnvironment()
+    environment.loginManager.status = .requiresApproval
+    environment.store.setLaunchAtLoginEnabled(true)
+    await environment.store.renameProfile(id: UUID(), to: "")
+    await environment.store.connectProfile(id: UUID())
+    let messages = environment.store.pendingErrorMessages
+    XCTAssertEqual(messages.count, 2)
+    XCTAssertNotEqual(messages.first, messages.last)
+    var isActive = false
+    var notices: [String] = []
+    let actions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { isActive },
+      showError: { notices.append($0) },
+      showLaunchAtLoginApproval: { openSettings in
+        XCTAssertFalse(environment.store.shouldShowLaunchAtLoginApproval)
+        notices.append("approval")
+        openSettings()
+      }
+    )
+
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertTrue(notices.isEmpty)
+    XCTAssertTrue(environment.store.shouldShowLaunchAtLoginApproval)
+    XCTAssertEqual(environment.store.pendingErrorMessages, messages)
+    XCTAssertEqual(environment.loginManager.openSettingsCallCount, 0)
+
+    isActive = true
+    actions.presentPendingMessagesIfActive()
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(notices, ["approval"] + messages)
+    XCTAssertFalse(environment.store.shouldShowLaunchAtLoginApproval)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+    XCTAssertEqual(environment.loginManager.openSettingsCallCount, 1)
+  }
+
+  func testAutomaticErrorDrainStopsWhenApplicationLosesFocus() async {
+    let environment = VirtualDisplayTestEnvironment()
+    await environment.store.renameProfile(id: UUID(), to: "")
+    await environment.store.connectProfile(id: UUID())
+    let messages = environment.store.pendingErrorMessages
+    var isActive = true
+    var shown: [String] = []
+    let actions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { isActive },
+      showError: {
+        shown.append($0)
+        isActive = false
+      }
+    )
+
+    actions.presentPendingMessagesIfActive()
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(shown, Array(messages.prefix(1)))
+    XCTAssertEqual(environment.store.pendingErrorMessages, Array(messages.dropFirst()))
+
+    isActive = true
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(shown, messages)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testErrorWaitsWhenApplicationLosesFocusDuringApproval() async {
+    let environment = VirtualDisplayTestEnvironment()
+    environment.loginManager.status = .requiresApproval
+    environment.store.setLaunchAtLoginEnabled(true)
+    await environment.store.renameProfile(id: UUID(), to: "")
+    let messages = environment.store.pendingErrorMessages
+    var isActive = true
+    var shown: [String] = []
+    let actions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { isActive },
+      showError: { shown.append($0) },
+      showLaunchAtLoginApproval: { _ in
+        shown.append("approval")
+        isActive = false
+      }
+    )
+
+    actions.presentPendingMessagesIfActive()
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(shown, ["approval"])
+    XCTAssertFalse(environment.store.shouldShowLaunchAtLoginApproval)
+    XCTAssertEqual(environment.store.pendingErrorMessages, messages)
+
+    isActive = true
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(shown, ["approval"] + messages)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testNoticePresentationDoesNotReenterAcrossActionHandlers() async {
+    let environment = VirtualDisplayTestEnvironment()
+    await environment.store.renameProfile(id: UUID(), to: "")
+    await environment.store.connectProfile(id: UUID())
+    let messages = environment.store.pendingErrorMessages
+    var events: [String] = []
+    let menuActions = DisplayActions(
+      store: environment.store,
+      showError: { _ in XCTFail("A second action handler must not open a nested alert") }
+    )
+    let windowActions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { true },
+      showError: { message in
+        events.append("begin: \(message)")
+        menuActions.presentPendingMessages()
+        events.append("end: \(message)")
+      }
+    )
+
+    windowActions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(events, messages.flatMap { ["begin: \($0)", "end: \($0)"] })
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testErrorsQueuedDuringPresentationAreShownOnce() async {
+    let environment = VirtualDisplayTestEnvironment()
+    await environment.store.renameProfile(id: UUID(), to: "")
+    let firstMessage = environment.store.pendingErrorMessages.first
+    var shown: [String] = []
+    var nextMessage: String?
+    let menuActions = DisplayActions(
+      store: environment.store,
+      showError: { _ in XCTFail("A new failure must wait for the current alert") }
+    )
+    let actions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { true },
+      showError: { message in
+        shown.append(message)
+        if shown.count == 1 {
+          environment.loginManager.registerError = NSError(domain: "NoticeTests", code: 1)
+          environment.store.setLaunchAtLoginEnabled(true)
+          nextMessage = environment.store.pendingErrorMessages.first
+          menuActions.presentPendingMessages()
+        }
+      }
+    )
+
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(shown.count, 2)
+    XCTAssertEqual(shown.first, firstMessage)
+    XCTAssertEqual(shown.last, nextMessage)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testApprovalQueuedDuringErrorPresentationWaitsForCurrentAlert() async {
+    let environment = VirtualDisplayTestEnvironment()
+    await environment.store.renameProfile(id: UUID(), to: "")
+    var events: [String] = []
+    let menuActions = DisplayActions(
+      store: environment.store,
+      showLaunchAtLoginApproval: { _ in XCTFail("Approval must wait for the error alert") }
+    )
+    let actions = DisplayActions(
+      store: environment.store,
+      isApplicationActive: { true },
+      showError: { _ in
+        events.append("begin error")
+        environment.loginManager.status = .requiresApproval
+        environment.store.setLaunchAtLoginEnabled(true)
+        menuActions.presentPendingMessages()
+        XCTAssertTrue(environment.store.shouldShowLaunchAtLoginApproval)
+        events.append("end error")
+      },
+      showLaunchAtLoginApproval: { _ in
+        XCTAssertFalse(environment.store.shouldShowLaunchAtLoginApproval)
+        events.append("approval")
+      }
+    )
+
+    actions.presentPendingMessagesIfActive()
+
+    XCTAssertEqual(events, ["begin error", "end error", "approval"])
+    XCTAssertFalse(environment.store.shouldShowLaunchAtLoginApproval)
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
+  }
+
+  func testConcurrentAddRequestsCreateOneDistinctProfileEach() async {
+    let environment = VirtualDisplayTestEnvironment()
+    let actions = DisplayActions(
+      store: environment.store,
+      showError: { _ in XCTFail("A fake display connection must succeed") }
+    )
+    let started = expectation(description: "Both requested displays start connecting")
+    started.expectedFulfillmentCount = 2
+    var released = false
+    var waiters: [CheckedContinuation<Void, Never>] = []
+    environment.backend.beforeConnect = { _ in
+      started.fulfill()
+      if !released {
+        await withCheckedContinuation { waiters.append($0) }
+      }
+    }
+    let first = Task { await actions.addDisplay(DisplayActions.recommendedResolution) }
+    let second = Task { await actions.addDisplay(DisplayActions.recommendedResolution) }
+
+    await fulfillment(of: [started], timeout: 2)
+
+    XCTAssertEqual(environment.store.profiles.count, 2)
+    XCTAssertEqual(Set(environment.store.profiles.map(\.id)).count, 2)
+    XCTAssertEqual(Set(environment.store.profiles.map(\.name)).count, 2)
+    XCTAssertEqual(environment.backend.connectRequests.count, 2)
+    XCTAssertEqual(environment.repository.state.profiles, environment.store.profiles)
+
+    released = true
+    for waiter in waiters { waiter.resume() }
+    await first.value
+    await second.value
+    environment.backend.beforeConnect = nil
+
+    XCTAssertTrue(
+      environment.store.profiles.allSatisfy { environment.store.state(for: $0.id).isConnected }
+    )
+    XCTAssertTrue(environment.store.pendingErrorMessages.isEmpty)
   }
 
   private func assertManagementViewLaysOut(

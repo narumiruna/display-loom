@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -5,7 +6,6 @@ struct DisplayManagerView: View {
   static let windowID = "displays"
 
   @ObservedObject var store: VirtualDisplayStore
-  @Environment(\.scenePhase) private var scenePhase
 
   private var actions: DisplayActions { DisplayActions(store: store) }
 
@@ -88,16 +88,18 @@ struct DisplayManagerView: View {
       }
     }
     .onAppear {
-      actions.presentPendingMessages()
+      actions.presentPendingMessagesIfActive()
     }
-    .onChange(of: scenePhase) { _, phase in
-      if phase == .active { actions.presentPendingMessages() }
+    .onReceive(
+      NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+    ) { _ in
+      actions.presentPendingMessagesIfActive()
     }
     .onChange(of: store.shouldShowLaunchAtLoginApproval) { _, requiresApproval in
-      if requiresApproval && scenePhase == .active { actions.presentPendingMessages() }
+      if requiresApproval { actions.presentPendingMessagesIfActive() }
     }
-    .onChange(of: store.lastErrorMessage) { _, message in
-      if message != nil && scenePhase == .active { actions.presentStoreErrorIfNeeded() }
+    .onChange(of: store.pendingErrorMessages) { _, messages in
+      if !messages.isEmpty { actions.presentPendingMessagesIfActive() }
     }
   }
 

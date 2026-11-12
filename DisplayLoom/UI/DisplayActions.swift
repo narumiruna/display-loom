@@ -1,8 +1,28 @@
+import AppKit
 import Foundation
 
 @MainActor
 struct DisplayActions {
   let store: VirtualDisplayStore
+
+  private let isApplicationActive: @MainActor () -> Bool
+  private let showError: @MainActor (String) -> Void
+  private let showLaunchAtLoginApproval: @MainActor (@escaping () -> Void) -> Void
+  private static var isPresentingNotice = false
+
+  init(
+    store: VirtualDisplayStore,
+    isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
+    showError: @escaping @MainActor (String) -> Void = { DialogPresenter.showError($0) },
+    showLaunchAtLoginApproval: @escaping @MainActor (@escaping () -> Void) -> Void = {
+      DialogPresenter.showLaunchAtLoginApproval(openSettings: $0)
+    }
+  ) {
+    self.store = store
+    self.isApplicationActive = isApplicationActive
+    self.showError = showError
+    self.showLaunchAtLoginApproval = showLaunchAtLoginApproval
+  }
 
   static let recommendedResolution = ResolutionPreset(
     width: 1_920,
@@ -13,40 +33,40 @@ struct DisplayActions {
   func addDisplay(_ resolution: ResolutionPreset) async {
     guard approve8KIfNeeded(resolution) else { return }
     await store.addDisplay(resolution: resolution)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func connect(_ profile: VirtualDisplayProfile) async {
     await store.connectProfile(id: profile.id)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func disconnect(_ profile: VirtualDisplayProfile) async {
     await store.disconnectProfile(id: profile.id)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func selectResolution(_ resolution: ResolutionPreset, for profileID: UUID) async {
     guard approve8KIfNeeded(resolution) else { return }
     await store.setResolution(resolution, for: profileID)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func setMirrorSource(_ sourceID: UUID?, for profileID: UUID) async {
     await store.setMirrorSource(sourceID, for: profileID)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func rename(_ profile: VirtualDisplayProfile) async {
     guard let name = DialogPresenter.requestName(currentName: profile.name) else { return }
     await store.renameProfile(id: profile.id, to: name)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func remove(_ profile: VirtualDisplayProfile) async {
     guard DialogPresenter.confirmRemoval(name: profile.name) else { return }
     await store.removeProfile(id: profile.id)
-    presentStoreErrorIfNeeded()
+    presentPendingMessages()
   }
 
   func updateLaunchAtLogin(_ enabled: Bool) {
@@ -55,18 +75,30 @@ struct DisplayActions {
   }
 
   func presentPendingMessages() {
-    if store.shouldShowLaunchAtLoginApproval {
-      store.clearLaunchAtLoginApprovalNotice()
-      DialogPresenter.showLaunchAtLoginApproval {
-        store.openLoginItemSettings()
-      }
-    }
-    presentStoreErrorIfNeeded()
+    presentPendingMessages(while: { true })
   }
 
-  func presentStoreErrorIfNeeded() {
-    guard let message = store.takeLastErrorMessage() else { return }
-    DialogPresenter.showError(message)
+  func presentPendingMessagesIfActive() {
+    presentPendingMessages(while: isApplicationActive)
+  }
+
+  private func presentPendingMessages(while canPresent: @MainActor () -> Bool) {
+    guard !Self.isPresentingNotice, canPresent() else { return }
+    Self.isPresentingNotice = true
+    defer { Self.isPresentingNotice = false }
+
+    while canPresent() {
+      if store.shouldShowLaunchAtLoginApproval {
+        store.clearLaunchAtLoginApprovalNotice()
+        showLaunchAtLoginApproval {
+          store.openLoginItemSettings()
+        }
+      } else if let message = store.takeNextErrorMessage() {
+        showError(message)
+      } else {
+        break
+      }
+    }
   }
 
   private func approve8KIfNeeded(_ resolution: ResolutionPreset) -> Bool {
