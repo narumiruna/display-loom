@@ -6,8 +6,19 @@ struct DisplayManagerView: View {
   static let windowID = "displays"
 
   @ObservedObject var store: VirtualDisplayStore
+  @State private var resolutionSelections: [UUID: ResolutionSelection] = [:]
 
-  private var actions: DisplayActions { DisplayActions(store: store) }
+  private struct ResolutionSelection {
+    let requestID = UUID()
+    let resolutionID: String
+  }
+
+  private let actions: DisplayActions
+
+  init(store: VirtualDisplayStore, actions: DisplayActions? = nil) {
+    self.store = store
+    self.actions = actions ?? DisplayActions(store: store)
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -188,10 +199,17 @@ struct DisplayManagerView: View {
     Picker(
       "window.resolution",
       selection: Binding(
-        get: { profile.resolutionID },
+        get: { resolutionSelections[profile.id]?.resolutionID ?? profile.resolutionID },
         set: { resolutionID in
           guard let resolution = ResolutionPreset.preset(withID: resolutionID) else { return }
-          Task { await actions.selectResolution(resolution, for: profile.id) }
+          let selection = ResolutionSelection(resolutionID: resolutionID)
+          resolutionSelections[profile.id] = selection
+          Task {
+            await actions.selectResolution(resolution, for: profile.id)
+            if resolutionSelections[profile.id]?.requestID == selection.requestID {
+              resolutionSelections[profile.id] = nil
+            }
+          }
         }
       )
     ) {
