@@ -26,6 +26,7 @@ enum PerformanceChecks {
     try await supersededCreation()
     try await recoveryDuringFailure()
     try await resolutionLifecycleAndFailures()
+    try await overlappingOperationErrors()
     try await storeLifetime()
     try await mainActorResponsiveness()
     try await persistenceAndRecovery()
@@ -101,7 +102,7 @@ enum PerformanceChecks {
       "Failure must preserve intent"
     )
     try require(
-      store.takeLastErrorMessage() == nil,
+      store.takeNextErrorMessage() == nil,
       "Automatic failure must not produce a modal error"
     )
 
@@ -154,7 +155,7 @@ enum PerformanceChecks {
       environment.backend.resolutionRequests.isEmpty,
       "Pending mirror must reject resolution changes"
     )
-    try require(store.takeLastErrorMessage() != nil, "Rejected resolution must report an error")
+    try require(store.takeNextErrorMessage() != nil, "Rejected resolution must report an error")
     manager.beforeMirror = nil
     gate.open()
     await store.waitForDisplayUpdates()
@@ -427,7 +428,7 @@ enum PerformanceChecks {
       "A failed mode must not be saved"
     )
     try require(
-      store.takeLastErrorMessage()
+      store.takeNextErrorMessage()
         == VirtualDisplayBackendError.modeSwitchFailed.localizedDescription,
       "Mode error must be reported without double wrapping"
     )
@@ -455,7 +456,7 @@ enum PerformanceChecks {
       "A failed newer write must retain the preceding successful actual mode"
     )
     try require(
-      store.takeLastErrorMessage() != nil,
+      store.takeNextErrorMessage() != nil,
       "The failed newest request must report an error"
     )
     backend.resolutionErrors.removeAll()
@@ -478,6 +479,55 @@ enum PerformanceChecks {
       "A late mode completion must not restore a removed profile"
     )
     print("PASS regression: resolution ordering, changed indexes, errors, and removal")
+  }
+
+  static func overlappingOperationErrors() async throws {
+    let environment = await environment()
+    let store = environment.store
+    let backend = environment.backend
+    let profileID = store.profiles[0].id
+    let resolutionError = VirtualDisplayBackendError.modeSwitchFailed
+    let connectionError = VirtualDisplayBackendError.creationFailed
+    backend.setResolutionError = resolutionError
+    backend.connectError = connectionError
+    let gate = MirrorCheckGate()
+    defer { gate.open() }
+    backend.beforeResolution = { await gate.wait() }
+
+    let resolution = Task {
+      await store.setResolution(ResolutionPreset.preset(withID: "2560x1440")!, for: profileID)
+    }
+    await gate.entered()
+    await store.addDisplay(resolution: ResolutionPreset.preset(withID: "1920x1080")!)
+    let errorsWhileResolutionPending = store.pendingErrorMessages
+    gate.open()
+    await resolution.value
+
+    try require(
+      errorsWhileResolutionPending == [connectionError.localizedDescription],
+      "Connection failure must remain queued while the resolution operation is suspended"
+    )
+    try require(
+      store.pendingErrorMessages
+        == [connectionError.localizedDescription, resolutionError.localizedDescription],
+      "Overlapping operations must queue both failures in report order"
+    )
+    try require(
+      store.takeNextErrorMessage() == connectionError.localizedDescription,
+      "Overlapping operations must preserve the first reported connection failure"
+    )
+    try require(
+      store.takeNextErrorMessage() == resolutionError.localizedDescription,
+      "Overlapping operations must preserve the later resolution failure"
+    )
+    try require(store.pendingErrorMessages.isEmpty, "Consumption must empty the error queue")
+    try require(store.takeNextErrorMessage() == nil, "Each failure must be consumed only once")
+    try require(store.state(for: profileID).isConnected, "Failed mode must keep the connection")
+    try require(
+      store.profile(id: profileID)?.resolutionID == "1920x1080",
+      "Failed mode must preserve the saved resolution"
+    )
+    print("PASS R1: overlapping fake-backend failures remain available in report order")
   }
 
   static func storeLifetime() async throws {

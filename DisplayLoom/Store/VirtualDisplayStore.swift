@@ -29,7 +29,7 @@ final class VirtualDisplayStore: ObservableObject {
   @Published private(set) var backendAvailability: VirtualDisplayBackendAvailability
   @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus
   @Published private(set) var shouldShowLaunchAtLoginApproval = false
-  @Published private(set) var lastErrorMessage: String?
+  @Published private(set) var pendingErrorMessages: [String] = []
   @Published private(set) var mirrorSources: [DisplayMirrorSource] = []
   @Published private(set) var activeMirrorSourceIDs: [UUID: UUID] = [:]
   @Published private(set) var mirrorRestoreFailures: Set<UUID> = []
@@ -449,9 +449,9 @@ final class VirtualDisplayStore: ObservableObject {
     shouldShowLaunchAtLoginApproval = false
   }
 
-  func takeLastErrorMessage() -> String? {
-    defer { lastErrorMessage = nil }
-    return lastErrorMessage
+  func takeNextErrorMessage() -> String? {
+    guard !pendingErrorMessages.isEmpty else { return nil }
+    return pendingErrorMessages.removeFirst()
   }
 
   private func detachConnection(for profileID: UUID) -> Task<Void, Never>? {
@@ -829,7 +829,7 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   private func reportError(_ message: String) {
-    lastErrorMessage = message
+    pendingErrorMessages.append(message)
     logger.error("\(message, privacy: .public)")
   }
 

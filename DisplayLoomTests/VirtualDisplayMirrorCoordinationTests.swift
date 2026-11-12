@@ -160,7 +160,7 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
     XCTAssertEqual(environment.mirroringManager.mirrorAttempts.count, attemptsBeforeRestoring + 1)
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
     XCTAssertTrue(environment.store.hasMirrorRestoreFailure(profileID: profile.id))
-    XCTAssertNil(environment.store.takeLastErrorMessage())
+    XCTAssertNil(environment.store.takeNextErrorMessage())
 
     let rejectedSourceID = UUID()
     await environment.store.setMirrorSource(rejectedSourceID, for: profile.id)
@@ -175,7 +175,7 @@ final class VirtualDisplayMirrorCoordinationTests: XCTestCase {
         MirrorRequest(targetDisplayID: target, sourceID: source.id),
       ]
     )
-    XCTAssertEqual(environment.store.takeLastErrorMessage(), error.localizedDescription)
+    XCTAssertEqual(environment.store.takeNextErrorMessage(), error.localizedDescription)
     XCTAssertEqual(environment.repository.state.profiles[0].mirrorSourceID, source.id)
     XCTAssertNil(environment.store.activeMirrorSourceIDs[profile.id])
     XCTAssertTrue(environment.store.hasMirrorRestoreFailure(profileID: profile.id))

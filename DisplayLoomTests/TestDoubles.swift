@@ -137,8 +137,8 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   var connectError: VirtualDisplayBackendError?
   var setResolutionError: VirtualDisplayBackendError?
   var resolutionErrors: [String: VirtualDisplayBackendError] = [:]
-  var beforeConnect: ((VirtualDisplayProfile) async -> Void)?
-  var beforeResolution: (() async -> Void)?
+  var beforeConnect: (@MainActor (VirtualDisplayProfile) async -> Void)?
+  var beforeResolution: (@MainActor () async -> Void)?
 
   private(set) var createdConnections: [FakeDisplayConnection] = []
   private(set) var connectRequests: [(VirtualDisplayProfile, ResolutionPreset)] = []
@@ -148,6 +148,7 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   private var terminationHandlers: [UUID: () -> Void] = [:]
   private var nextDisplayID: CGDirectDisplayID = 100
 
+  @MainActor
   func connect(
     profile: VirtualDisplayProfile,
     resolution: ResolutionPreset,
@@ -165,6 +166,7 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
     return connection
   }
 
+  @MainActor
   func setResolution(
     _ resolution: ResolutionPreset,
     for connection: any VirtualDisplayConnection

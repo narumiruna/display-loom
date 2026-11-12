@@ -6,6 +6,13 @@
 "display.externalName" = "外接顯示器";
 "display.numberedName" = "%@（%d）";
 
+"window.displays" = "虛擬螢幕";
+"window.description" = "管理虛擬螢幕與同步顯示設定。";
+"window.emptyDescription" = "使用工具列的 + 按鈕新增虛擬螢幕。";
+"window.resolution" = "解析度";
+"window.resolutionControlledByMirror" = "由同步來源控制";
+
+"menu.openWindow" = "開啟 Display Loom";
 "menu.noDisplays" = "尚無虛擬螢幕";
 "menu.addDisplay" = "新增虛擬螢幕";
 "menu.addDisplayWithResolution" = "以指定解析度新增…";
@@ -23,6 +30,8 @@
 "menu.about" = "關於 Display Loom";
 "menu.quit" = "結束 Display Loom";
 
+"status.connected" = "已連線";
+"status.disconnected" = "未連線";
 "status.connecting" = "連線中…";
 "status.failed" = "未連線：%@";
 

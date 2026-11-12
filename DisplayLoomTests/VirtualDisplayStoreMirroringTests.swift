@@ -28,7 +28,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
 
     XCTAssertEqual(environment.store.profile(id: profileID)?.mirrorSourceID, source.id)
     XCTAssertEqual(environment.store.activeMirrorSourceIDs[profileID], source.id)
-    XCTAssertNotNil(environment.store.takeLastErrorMessage())
+    XCTAssertNotNil(environment.store.takeNextErrorMessage())
 
     environment.mirroringManager.setMirrorError = nil
     environment.mirroringManager.onMirrorChange = {
@@ -284,7 +284,7 @@ final class VirtualDisplayStoreMirroringTests: XCTestCase {
 
     XCTAssertEqual(environment.store.profile(id: profileID)?.resolutionID, "1920x1080")
     XCTAssertTrue(environment.backend.resolutionRequests.isEmpty)
-    XCTAssertNotNil(environment.store.takeLastErrorMessage())
+    XCTAssertNotNil(environment.store.takeNextErrorMessage())
   }
 
   private func makeMirrorSource() -> DisplayMirrorSource {

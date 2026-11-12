@@ -1,6 +1,6 @@
 # Display Loom
 
-Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. Display Loom runs in the menu bar and lets you extend your desktop or mirror a built-in or external display.
+Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. Use the management window or menu bar to extend your desktop or mirror a built-in or external display.
 
 > [!WARNING]
 > This app uses the private CoreGraphics `CGVirtualDisplay` API, cannot be distributed through the Mac App Store, and may require updates after future macOS releases.
@@ -56,15 +56,21 @@ just run
 
 This builds and launches a Debug app without requiring a signing identity. Alternatively, open `DisplayLoom.xcodeproj` in Xcode and run the `DisplayLoom` scheme.
 
-Display Loom appears only in the menu bar, not the Dock.
+Display Loom opens a management window and appears in both the Dock and menu bar.
 
 ## Usage
 
-Click the display icon in the menu bar:
+Use the management window to control your virtual displays:
 
-- Choose **Add Virtual Display** to create and connect a 1920 × 1080 display, or **Add with Resolution…** to choose a preset.
-- Open a display's submenu to change its resolution, rename it, or configure mirroring.
-- Choose **Disconnect** to keep its saved settings for later, **Connect** to reconnect it, or **Remove…** to delete it and its settings.
+- Click **Add Virtual Display** in the toolbar to create and connect a 1920 × 1080 display. Use **Add with Resolution…** to choose a preset.
+- Each display card shows its connection state, resolution, mirroring source, and controls to rename or remove it.
+- Choose **Disconnect** to keep its saved settings, **Connect** to reconnect it, or **Remove…** to delete it and its settings.
+
+The display icon in the menu bar keeps the same controls. Choose **Open Display Loom** to show the management window. If the icon is hidden by other menu bar items, click Display Loom in the Dock or open the app again.
+
+Closing the window keeps Display Loom and its connected displays running. Use **Quit Display Loom** or press **Command-Q** to quit.
+
+Automatic error and login approval notices wait while another app has focus. Return to Display Loom to see pending notices.
 
 Display settings are saved. Displays left connected are restored when the app next launches.
 
@@ -72,8 +78,8 @@ On first launch, the app attempts to enable **Launch at Login**; you can change 
 
 ## Mirroring
 
-1. Open a connected virtual display's submenu.
-2. Choose **Mirror Display**, then select an available built-in or external display as the source.
+1. Find a connected display in the management window, or open its menu bar submenu.
+2. Use **Mirror Display** to select an available built-in or external display as the source.
 3. To return to an extended desktop, choose **Mirror Display > Do Not Mirror**.
 
 Display Loom remembers the source and attempts to restore mirroring after the virtual display reconnects, the app relaunches, the Mac wakes, or the source display reconnects.
@@ -121,6 +127,16 @@ The opt-in integration test creates a real virtual display, changes its resoluti
 ```sh
 just test-live
 ```
+
+### Management window checks
+
+Before a release, check these desktop interactions manually. Unit tests check layout and display actions with test doubles, not Dock or menu bar interactions.
+
+1. Open the app. Confirm that the management window, Dock icon, and menu bar icon appear.
+2. Close the window. Confirm that the app stays running. Reopen it from the Dock and from **Open Display Loom** in the menu bar. Repeated requests must use the same window.
+3. Check the empty state and display cards in English and Traditional Chinese. Check connection controls, resolution choices, and mirroring warnings. Display operations change the real desktop configuration; use a Mac prepared for those changes.
+4. Cancel the rename, removal, and 8K dialogs from both interfaces. Confirm that saved settings do not change. Check error messages and picker state after a rejected operation.
+5. Check that a background display error does not activate Display Loom. Return to the app and confirm that each pending notice appears once.
 
 ## Change notes and releases
 
