@@ -86,7 +86,7 @@ Display Loom remembers the source and attempts to restore mirroring after the vi
 
 If automatic restoration fails, select the saved source again to retry. Repeated notifications for unchanged display state do not trigger repeated attempts.
 
-While mirroring, macOS controls the compatible display mode. Turn off mirroring before changing the virtual display's saved resolution.
+While mirroring, macOS controls the compatible display mode. If a display is already in a mirror set when it connects, Display Loom keeps that state and does not apply its saved resolution. Turn off mirroring before changing the virtual display's saved resolution.
 
 ## Supported resolutions
 

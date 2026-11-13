@@ -21,10 +21,12 @@ enum BackendPerformanceChecks {
     try await unmirroredModeWritesReachHandle()
     try await modeWriteRechecksMirrorStateOnWorker()
     try await releasedConnectionCleansUpOnce()
-    try await mirroredInitialModeIsRejectedAndCleansUpOnce()
+    try await mirroredInitialModeIsSkippedAndConnectionRemainsValid()
+    try await registrationPreservesRestoredMirrorState()
+    try await mirroringDuringInitialModeKeepsConnection()
     print(
       """
-      PASS F2: 15 backend/worker checks \
+      PASS F2: 17 backend/worker checks \
       (registration, deadlines, cancellation, cleanup, mode safety)
       """
     )
@@ -207,20 +209,23 @@ enum BackendPerformanceChecks {
   }
 
   static func initialModeFailureIsNormalizedAndCleansUpOnce() async throws {
-    let worker = DisplayOperationWorker()
-    let handle = BackendTestHandle(registered: true)
-    handle.onSetMode = {
-      throw NSError(
-        domain: VSCGVirtualDisplayErrorDomain,
-        code: VSCGVirtualDisplayError.Code.modeUnavailable.rawValue
-      )
+    let cases: [(VSCGVirtualDisplayError.Code, VirtualDisplayBackendError)] = [
+      (.modeUnavailable, .modeUnavailable),
+      (.invalidConfiguration, .invalidConfiguration),
+    ]
+    for (code, expected) in cases {
+      let worker = DisplayOperationWorker()
+      let handle = BackendTestHandle(registered: true)
+      handle.onSetMode = {
+        throw NSError(domain: VSCGVirtualDisplayErrorDomain, code: code.rawValue)
+      }
+      let backend = makeBackend(worker: worker, handle: handle)
+      let task = Task { try await connect(backend) }
+      try await requireFailure(task, expected: expected)
+      try await worker.perform {}
+      try require(handle.modeCount == 1, "Initial mode must not retry after an error")
+      try require(handle.invalidationCount == 1, "Initial mode failure must clean up once")
     }
-    let backend = makeBackend(worker: worker, handle: handle)
-    let task = Task { try await connect(backend) }
-    try await requireFailure(task, expected: .modeUnavailable)
-    try await worker.perform {}
-    try require(handle.modeCount == 1, "Initial mode must not retry after an error")
-    try require(handle.invalidationCount == 1, "Initial mode failure must clean up once")
   }
 
   static func invalidationIsSerializedWithModeWriteAndKeepsDisplayID() async throws {
@@ -306,17 +311,78 @@ enum BackendPerformanceChecks {
     try require(handle.invalidationCount == 1, "Released connection must clean up once")
   }
 
-  static func mirroredInitialModeIsRejectedAndCleansUpOnce() async throws {
+  static func mirroredInitialModeIsSkippedAndConnectionRemainsValid() async throws {
     for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
       let worker = DisplayOperationWorker()
       let handle = BackendTestHandle(registered: true)
       handle.mirrorState = mirrorState
       let backend = makeBackend(worker: worker, handle: handle)
-      let task = Task { try await connect(backend) }
-      try await requireFailure(task, expected: .invalidConfiguration)
+      let connection = try await connect(backend)
+      try require(connection.isValid, "A mirrored display must connect")
+      try require(handle.modeCount == 0, "Connection must not change a mirrored display's mode")
+      try require(handle.mirrorState == mirrorState, "Connection must preserve mirroring")
+      try require(handle.invalidationCount == 0, "A mirrored connection must retain its handle")
+      do {
+        try await backend.setResolution(resolution, for: connection)
+        throw Failure("Later resolution changes must still reject mirroring")
+      } catch let error as VirtualDisplayBackendError {
+        try require(error == .invalidConfiguration, "Mirrored mode error must be normalized")
+      }
+      try require(handle.modeCount == 0, "A mirrored mode write must not reach the handle")
+
+      handle.mirrorState = .unmirrored
+      try await backend.setResolution(resolution, for: connection)
+      try require(handle.modeCount == 1, "Resolution must be writable after mirroring ends")
+      connection.invalidate()
       try await worker.perform {}
-      try require(handle.modeCount == 0, "Initial mode must reject a mirror \(mirrorState)")
-      try require(handle.invalidationCount == 1, "Rejected initial mode must clean up once")
+      try require(handle.invalidationCount == 1, "A mirrored connection must clean up once")
+    }
+  }
+
+  static func registrationPreservesRestoredMirrorState() async throws {
+    for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
+      let worker = DisplayOperationWorker()
+      let handle = BackendTestHandle()
+      let clock = BackendRegistrationTestClock()
+      let backend = makeBackend(worker: worker, handle: handle, clock: clock.clock)
+      let task = Task { try await connect(backend) }
+      _ = await clock.waitForSleep()
+      handle.mirrorState = mirrorState
+      handle.register()
+      clock.advance(by: 0.05)
+
+      let connection = try await task.value
+      try require(connection.isValid, "A display mirrored during registration must connect")
+      try require(handle.modeCount == 0, "Registration must skip a restored mirror's initial mode")
+      try require(handle.mirrorState == mirrorState, "Registration must preserve mirroring")
+      try require(handle.invalidationCount == 0, "Registration must retain the mirrored handle")
+      connection.invalidate()
+      try await worker.perform {}
+      try require(handle.invalidationCount == 1, "A restored mirror must clean up once")
+    }
+  }
+
+  static func mirroringDuringInitialModeKeepsConnection() async throws {
+    for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
+      let worker = DisplayOperationWorker()
+      let handle = BackendTestHandle(registered: true)
+      handle.onSetMode = { [weak handle] in
+        handle?.mirrorState = mirrorState
+        // The bridge rejects mirroring that starts after the Swift check.
+        throw NSError(
+          domain: VSCGVirtualDisplayErrorDomain,
+          code: VSCGVirtualDisplayError.Code.invalidConfiguration.rawValue
+        )
+      }
+      let backend = makeBackend(worker: worker, handle: handle)
+      let connection = try await connect(backend)
+      try require(connection.isValid, "Mirroring during initial mode selection must not disconnect")
+      try require(handle.modeCount == 1, "A rejected initial mode must not retry")
+      try require(handle.mirrorState == mirrorState, "Initial selection must preserve mirroring")
+      try require(handle.invalidationCount == 0, "A mirror transition must retain the connection")
+      connection.invalidate()
+      try await worker.perform {}
+      try require(handle.invalidationCount == 1, "A mirror transition must clean up once")
     }
   }
 
