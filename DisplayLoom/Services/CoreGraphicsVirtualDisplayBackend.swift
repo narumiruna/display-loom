@@ -176,8 +176,9 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
             throw VirtualDisplayBackendError.registrationTimedOut
           }
           guard try pending.connection.checkRegistration() else { return false }
-          try pending.connection.setResolution(
+          try Self.setInitialResolution(
             resolution,
+            for: pending.connection,
             isInMirrorSet: isInMirrorSet
           )
           return true
@@ -231,6 +232,24 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
         "Could not switch display mode: \(mappedError.localizedDescription, privacy: .public)"
       )
       throw mappedError
+    }
+  }
+
+  private static func setInitialResolution(
+    _ resolution: ResolutionPreset,
+    for connection: CoreGraphicsVirtualDisplayConnection,
+    isInMirrorSet: (CGDirectDisplayID) -> Bool
+  ) throws {
+    // macOS can restore mirroring as the display registers. Keep the
+    // connection and let macOS choose the mirror set's compatible mode.
+    guard !isInMirrorSet(connection.displayID) else { return }
+    do {
+      try connection.setResolution(resolution, isInMirrorSet: isInMirrorSet)
+    } catch {
+      // Mirroring can start before the bridge's final pre-write check.
+      guard mapError(error) == .invalidConfiguration,
+        isInMirrorSet(connection.displayID)
+      else { throw error }
     }
   }
 

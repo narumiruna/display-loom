@@ -147,8 +147,16 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
     try await BackendPerformanceChecks.releasedConnectionCleansUpOnce()
   }
 
-  func testMirroredInitialModeIsRejectedAndCleansUpOnce() async throws {
-    try await BackendPerformanceChecks.mirroredInitialModeIsRejectedAndCleansUpOnce()
+  func testMirroredInitialModeIsSkippedAndConnectionRemainsValid() async throws {
+    try await BackendPerformanceChecks.mirroredInitialModeIsSkippedAndConnectionRemainsValid()
+  }
+
+  func testRegistrationPreservesRestoredMirrorState() async throws {
+    try await BackendPerformanceChecks.registrationPreservesRestoredMirrorState()
+  }
+
+  func testMirroringDuringInitialModeKeepsConnection() async throws {
+    try await BackendPerformanceChecks.mirroringDuringInitialModeKeepsConnection()
   }
 
   func testResolutionRejectsForeignConnectionWithNormalizedError() async {
