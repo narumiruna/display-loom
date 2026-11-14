@@ -1,6 +1,6 @@
 # Display Loom
 
-Create multiple virtual displays on macOS, with resolutions up to 8K at 60 Hz. Use the management window or menu bar to extend your desktop or mirror a built-in or external display.
+Create multiple virtual displays on macOS, with resolutions up to 8K. Choose 60 Hz (default) or 30 Hz for each display. Use the management window or menu bar to extend your desktop or mirror a built-in or external display.
 
 > [!WARNING]
 > This app uses the private CoreGraphics `CGVirtualDisplay` API, cannot be distributed through the Mac App Store, and may require updates after future macOS releases.
@@ -63,7 +63,7 @@ Display Loom opens a management window and appears in both the Dock and menu bar
 Use the management window to control your virtual displays:
 
 - Click **Add Virtual Display** in the toolbar to create and connect a 1920 × 1080 display. Use **Add with Resolution…** to choose a preset.
-- Each display card shows its connection state, resolution, mirroring source, and controls to rename or remove it.
+- Each display card shows its connection state, resolution, refresh rate, mirroring source, and controls to rename or remove it.
 - Choose **Disconnect** to keep its saved settings, **Connect** to reconnect it, or **Remove…** to delete it and its settings.
 
 The display icon in the menu bar keeps the same controls. Choose **Open Display Loom** to show the management window. If the icon is hidden by other menu bar items, click Display Loom in the Dock or open the app again.
@@ -76,6 +76,14 @@ Display settings are saved. Displays left connected are restored when the app ne
 
 On first launch, the app attempts to enable **Launch at Login**; you can change this in the menu. macOS may require approval in **System Settings > General > Login Items**.
 
+## Refresh rate
+
+Use **Refresh Rate** in a display card or its menu bar submenu to select **60 Hz (Default)** or **30 Hz (Low Refresh Rate)**. New displays and settings saved by older versions use 60 Hz.
+
+The choice is saved per display and used when it reconnects. You can change it while disconnected without connecting the display. Connected changes keep the same virtual display; a rejected change keeps the last saved mode.
+
+30 Hz is intended for mostly static content. Scrolling and animations can be less smooth. Lower power use is not guaranteed or measured. The selected rate does not guarantee the same frame rate through screen capture, remote transmission, or a physical display.
+
 ## Mirroring
 
 1. Find a connected display in the management window, or open its menu bar submenu.
@@ -86,11 +94,11 @@ Display Loom remembers the source and attempts to restore mirroring after the vi
 
 If automatic restoration fails, select the saved source again to retry. Repeated notifications for unchanged display state do not trigger repeated attempts.
 
-While mirroring, macOS controls the compatible display mode. If a display is already in a mirror set when it connects, Display Loom keeps that state and does not apply its saved resolution. Turn off mirroring before changing the virtual display's saved resolution.
+While mirroring, macOS controls the compatible display mode. If a display is already in a mirror set when it connects, Display Loom keeps that state and does not apply its saved resolution or refresh rate. Turn off mirroring before changing the virtual display's saved resolution or refresh rate.
 
 ## Supported resolutions
 
-All presets use native pixels (LoDPI, not HiDPI scaling) at 60 Hz.
+All presets use native pixels (LoDPI, not HiDPI scaling), with 60 Hz (default) and 30 Hz modes.
 
 | 16:9 | 16:10 |
 | --- | --- |
@@ -122,7 +130,7 @@ just test-performance
 
 This compiles the production Swift and Objective-C code for macOS 14 and runs shared regression checks with test doubles. It does not create or reconfigure a real display. It does not replace the full app build or XCTest suite.
 
-The opt-in integration test creates a real virtual display, changes its resolution, and tests mirroring when a source display is available. Run it only when you are ready for changes to your display configuration:
+The opt-in integration test creates a real virtual display, changes its resolution and refresh rate, and tests mirroring when a source display is available. Run it only when you are ready for changes to your display configuration:
 
 ```sh
 just test-live
@@ -137,6 +145,16 @@ Before a release, check these desktop interactions manually. Unit tests check la
 3. Check the empty state and display cards in English and Traditional Chinese. Check connection controls, resolution choices, and mirroring warnings. Display operations change the real desktop configuration; use a Mac prepared for those changes.
 4. Cancel the rename, removal, and 8K dialogs from both interfaces. Confirm that saved settings do not change. Check error messages and picker state after a rejected operation.
 5. Check that a background display error does not activate Display Loom. Return to the app and confirm that each pending notice appears once.
+
+### Refresh-rate release checks
+
+The maintainer must complete these checks on a supported Mac before releasing refresh-rate support. Use a Mac prepared for display configuration changes. Real 30/60 Hz behavior remains unverified by the display-safe automated checks.
+
+1. Run `just test-live` only after approving real display changes. Confirm that CoreGraphics reports 60 Hz, then 30 Hz at both test resolutions, then 60 Hz again.
+2. Select each rate from the management window and menu bar in English and Traditional Chinese. Confirm that the selected rate survives reconnect and app relaunch, and that changing resolution keeps the selected rate.
+3. Start mirroring. Confirm that neither interface allows a refresh-rate change and that macOS keeps control of the compatible mode. Stop mirroring and confirm that mode changes work again.
+
+These checks do not measure compositor cadence, physical output smoothness, GPU load, or power use. Do not claim power savings or measured frame-rate behavior without separate measurements.
 
 ## Change notes and releases
 

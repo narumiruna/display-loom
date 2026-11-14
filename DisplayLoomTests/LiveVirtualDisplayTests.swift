@@ -31,14 +31,35 @@ final class LiveVirtualDisplayTests: XCTestCase {
     let initialMode = try XCTUnwrap(CGDisplayCopyDisplayMode(connection.displayID))
     XCTAssertEqual(initialMode.pixelWidth, 1_920)
     XCTAssertEqual(initialMode.pixelHeight, 1_080)
+    XCTAssertEqual(initialMode.refreshRate, 60, accuracy: 0.5)
+
+    try await backend.setResolution(
+      ResolutionPreset.preset(withID: "1920x1080")!,
+      refreshRate: .low,
+      for: connection
+    )
+    let lowMode = try XCTUnwrap(CGDisplayCopyDisplayMode(connection.displayID))
+    XCTAssertEqual(lowMode.pixelWidth, 1_920)
+    XCTAssertEqual(lowMode.pixelHeight, 1_080)
+    XCTAssertEqual(lowMode.refreshRate, 30, accuracy: 0.5)
 
     try await backend.setResolution(
       ResolutionPreset.preset(withID: "1920x1200")!,
+      refreshRate: .low,
       for: connection
     )
     let switchedMode = try XCTUnwrap(CGDisplayCopyDisplayMode(connection.displayID))
     XCTAssertEqual(switchedMode.pixelWidth, 1_920)
     XCTAssertEqual(switchedMode.pixelHeight, 1_200)
+    XCTAssertEqual(switchedMode.refreshRate, 30, accuracy: 0.5)
+
+    try await backend.setResolution(
+      ResolutionPreset.preset(withID: "1920x1200")!,
+      refreshRate: .standard,
+      for: connection
+    )
+    let standardMode = try XCTUnwrap(CGDisplayCopyDisplayMode(connection.displayID))
+    XCTAssertEqual(standardMode.refreshRate, 60, accuracy: 0.5)
 
     let mirroringManager = DisplayMirroringManager()
     guard

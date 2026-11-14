@@ -55,6 +55,11 @@ struct DisplayActions {
     presentPendingMessages()
   }
 
+  func selectRefreshRate(_ refreshRate: DisplayRefreshRate, for profileID: UUID) async {
+    await store.setRefreshRate(refreshRate, for: profileID)
+    presentPendingMessages()
+  }
+
   func setMirrorSource(_ sourceID: UUID?, for profileID: UUID) async {
     await store.setMirrorSource(sourceID, for: profileID)
     presentPendingMessages()

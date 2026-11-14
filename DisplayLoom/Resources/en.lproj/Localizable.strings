@@ -1,6 +1,9 @@
 "aspectRatio.16by9" = "16:9";
 "aspectRatio.16by10" = "16:10";
 
+"refreshRate.standard" = "60 Hz (Default)";
+"refreshRate.low" = "30 Hz (Low Refresh Rate)";
+
 "display.defaultName" = "Display Loom";
 "display.builtInName" = "Built-in Display";
 "display.externalName" = "External Display";
@@ -10,6 +13,7 @@
 "window.description" = "Manage virtual displays and display mirroring.";
 "window.emptyDescription" = "Add a virtual display with the + button in the toolbar.";
 "window.resolution" = "Resolution";
+"window.refreshRate" = "Refresh Rate";
 "window.resolutionControlledByMirror" = "Controlled by Mirror Source";
 
 "menu.openWindow" = "Open Display Loom";
@@ -20,6 +24,8 @@
 "menu.disconnect" = "Disconnect";
 "menu.resolutionCurrent" = "Resolution: %@";
 "menu.resolutionControlledByMirror" = "Resolution: Controlled by Mirror Source";
+"menu.refreshRateCurrent" = "Refresh Rate: %@";
+"menu.refreshRateControlledByMirror" = "Refresh Rate: Controlled by Mirror Source";
 "menu.mirrorDisplay" = "Mirror Display";
 "menu.mirrorNone" = "Do Not Mirror";
 "menu.mirrorRestoreFailed" = "Selected Source Is Not Active";
@@ -58,9 +64,10 @@
 "error.creationFailed" = "macOS could not create the virtual display. The system display limit may have been reached.";
 "error.settingsRejected" = "macOS rejected the requested virtual display settings.";
 "error.registrationTimedOut" = "The virtual display did not appear within two seconds.";
-"error.modeUnavailable" = "The selected resolution is not available on this Mac.";
-"error.modeSwitchFailed" = "macOS could not switch to the selected resolution.";
+"error.modeUnavailable" = "The selected resolution and refresh rate are not available on this Mac.";
+"error.modeSwitchFailed" = "macOS could not switch to the selected resolution and refresh rate.";
 "error.resolutionMirrored" = "Disconnect display mirroring before changing the resolution.";
+"error.refreshRateMirrored" = "Disconnect display mirroring before changing the refresh rate.";
 "error.displayList" = "Could not list displays (CoreGraphics error %d).";
 "error.mirrorTargetUnavailable" = "The virtual display is no longer available.";
 "error.mirrorSourceUnavailable" = "The selected source display is not available.";

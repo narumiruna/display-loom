@@ -7,10 +7,16 @@ struct DisplayManagerView: View {
 
   @ObservedObject var store: VirtualDisplayStore
   @State private var resolutionSelections: [UUID: ResolutionSelection] = [:]
+  @State private var refreshRateSelections: [UUID: RefreshRateSelection] = [:]
 
   private struct ResolutionSelection {
     let requestID = UUID()
     let resolutionID: String
+  }
+
+  private struct RefreshRateSelection {
+    let requestID = UUID()
+    let refreshRate: DisplayRefreshRate
   }
 
   private let actions: DisplayActions
@@ -159,6 +165,16 @@ struct DisplayManagerView: View {
           }
 
           GridRow {
+            Text("window.refreshRate")
+            if store.isMirroring(profileID: profile.id) {
+              Text("window.resolutionControlledByMirror")
+                .foregroundStyle(.secondary)
+            } else {
+              refreshRatePicker(for: profile, state: state)
+            }
+          }
+
+          GridRow {
             Text("menu.mirrorDisplay")
             mirrorPicker(for: profile, state: state)
           }
@@ -219,6 +235,34 @@ struct DisplayManagerView: View {
             Text(preset.displayName).tag(preset.id)
           }
         }
+      }
+    }
+    .labelsHidden()
+    .disabled(state.isBusy)
+  }
+
+  private func refreshRatePicker(
+    for profile: VirtualDisplayProfile,
+    state: DisplayConnectionState
+  ) -> some View {
+    Picker(
+      "window.refreshRate",
+      selection: Binding(
+        get: { refreshRateSelections[profile.id]?.refreshRate ?? profile.refreshRate },
+        set: { rate in
+          let selection = RefreshRateSelection(refreshRate: rate)
+          refreshRateSelections[profile.id] = selection
+          Task {
+            await actions.selectRefreshRate(rate, for: profile.id)
+            if refreshRateSelections[profile.id]?.requestID == selection.requestID {
+              refreshRateSelections[profile.id] = nil
+            }
+          }
+        }
+      )
+    ) {
+      ForEach(DisplayRefreshRate.allCases) { rate in
+        Text(rate.localizedName).tag(rate)
       }
     }
     .labelsHidden()

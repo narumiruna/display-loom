@@ -19,6 +19,7 @@ enum BackendPerformanceChecks {
     try await initialModeFailureIsNormalizedAndCleansUpOnce()
     try await invalidationIsSerializedWithModeWriteAndKeepsDisplayID()
     try await unmirroredModeWritesReachHandle()
+    try await refreshRatesAreAdvertisedAndSelected()
     try await modeWriteRechecksMirrorStateOnWorker()
     try await releasedConnectionCleansUpOnce()
     try await mirroredInitialModeIsSkippedAndConnectionRemainsValid()
@@ -26,7 +27,7 @@ enum BackendPerformanceChecks {
     try await mirroringDuringInitialModeKeepsConnection()
     print(
       """
-      PASS F2: 17 backend/worker checks \
+      PASS F2: 18 backend/worker checks \
       (registration, deadlines, cancellation, cleanup, mode safety)
       """
     )
@@ -271,6 +272,46 @@ enum BackendPerformanceChecks {
     try await worker.perform {}
   }
 
+  static func refreshRatesAreAdvertisedAndSelected() async throws {
+    for rate in DisplayRefreshRate.allCases {
+      let specs = CoreGraphicsVirtualDisplayBackend.modeSpecs(
+        resolution: resolution,
+        refreshRate: rate
+      )
+      try require(specs.count == ResolutionPreset.catalog.count * 2, "Advertise both rates")
+      try require(
+        specs.first?.width == UInt32(resolution.width)
+          && specs.first?.height == UInt32(resolution.height)
+          && specs.first?.refreshRate == Double(rate.rawValue),
+        "The saved resolution and refresh rate must be the preferred mode"
+      )
+      for preset in ResolutionPreset.catalog {
+        let rates = specs.filter {
+          $0.width == UInt32(preset.width) && $0.height == UInt32(preset.height)
+        }.map(\.refreshRate).sorted()
+        try require(rates == [30, 60], "Every resolution must advertise exactly 30 and 60 Hz")
+      }
+    }
+
+    let worker = DisplayOperationWorker()
+    let handle = BackendTestHandle(registered: true)
+    let backend = makeBackend(worker: worker, handle: handle)
+    let connection = try await backend.connect(
+      profile: VirtualDisplayProfile(
+        name: "Low Rate",
+        resolutionID: resolution.id,
+        refreshRate: .low
+      ),
+      resolution: resolution,
+      terminationHandler: {}
+    )
+    try await backend.setResolution(resolution, refreshRate: .standard, for: connection)
+    try await backend.setResolution(resolution, refreshRate: .low, for: connection)
+    try require(handle.writtenRefreshRates == [30, 60, 30], "Writes must use the requested rate")
+    connection.invalidate()
+    try await worker.perform {}
+  }
+
   static func modeWriteRechecksMirrorStateOnWorker() async throws {
     for mirrorState in [BackendTestHandle.MirrorState.secondary, .primary] {
       let worker = DisplayOperationWorker()
@@ -284,7 +325,9 @@ enum BackendPerformanceChecks {
       }
       await gate.entered.wait()
       let stateBeforeWrite = handle.mirrorState
-      let task = Task { try await backend.setResolution(resolution, for: connection) }
+      let task = Task {
+        try await backend.setResolution(resolution, refreshRate: .low, for: connection)
+      }
       gate.release()
       do {
         try await task.value
@@ -509,6 +552,7 @@ final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Se
   private var creations = 0
   private var invalidations = 0
   private var modes = 0
+  private var refreshRates: [Double] = []
   private var mirroring = MirrorState.unmirrored
   // Set hooks before the operation starts; do not change them while it runs.
   var onSetMode: (() throws -> Void)?
@@ -549,6 +593,12 @@ final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Se
     return modes
   }
 
+  var writtenRefreshRates: [Double] {
+    lock.lock()
+    defer { lock.unlock() }
+    return refreshRates
+  }
+
   var mirrorState: MirrorState {
     get {
       lock.lock()
@@ -583,6 +633,7 @@ final class BackendTestHandle: CoreGraphicsVirtualDisplayHandling, @unchecked Se
   func setMode(width: UInt32, height: UInt32, refreshRate: Double) throws {
     lock.lock()
     modes += 1
+    refreshRates.append(refreshRate)
     lock.unlock()
     try onSetMode?()
   }

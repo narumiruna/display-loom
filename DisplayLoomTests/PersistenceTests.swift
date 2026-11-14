@@ -46,6 +46,55 @@ final class PersistenceTests: XCTestCase {
 
     XCTAssertEqual(decoded.profiles.count, 1)
     XCTAssertNil(decoded.profiles[0].mirrorSourceID)
+    XCTAssertEqual(decoded.profiles[0].refreshRate, .standard)
+  }
+
+  func testRefreshRateCatalogAndProfileDefaults() {
+    XCTAssertEqual(DisplayRefreshRate.allCases.map(\.rawValue), [60, 30])
+    XCTAssertEqual(
+      VirtualDisplayProfile(name: "Default", resolutionID: "1920x1080").refreshRate,
+      .standard
+    )
+    XCTAssertNil(DisplayRefreshRate(rawValue: 120))
+  }
+
+  func testRefreshRatesSurviveRepositoryRoundTrip() {
+    let suiteName = "PersistenceTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let repository = StateRepository(defaults: defaults)
+    let profiles = DisplayRefreshRate.allCases.map { rate in
+      VirtualDisplayProfile(
+        name: "Saved \(rate.rawValue)",
+        resolutionID: "3840x2160",
+        mirrorSourceID: UUID(),
+        refreshRate: rate
+      )
+    }
+    let state = PersistedState(profiles: profiles, hasAttemptedLoginItemRegistration: true)
+
+    repository.save(state)
+
+    XCTAssertEqual(repository.load(), state)
+  }
+
+  func testOlderProfilePreservesMirrorSourceAndDefaultsTo60Hz() throws {
+    let profile = VirtualDisplayProfile(
+      name: "Older",
+      resolutionID: "1920x1080",
+      mirrorSourceID: UUID()
+    )
+    let data = try JSONEncoder().encode(profile)
+    var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    json.removeValue(forKey: "refreshRate")
+
+    let decoded = try JSONDecoder().decode(
+      VirtualDisplayProfile.self,
+      from: JSONSerialization.data(withJSONObject: json)
+    )
+
+    XCTAssertEqual(decoded, profile)
+    XCTAssertEqual(decoded.refreshRate, .standard)
   }
 
   func testStateRepositoryReturnsEmptyStateForCorruptData() {

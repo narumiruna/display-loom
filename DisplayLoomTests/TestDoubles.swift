@@ -137,6 +137,7 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   var connectError: VirtualDisplayBackendError?
   var setResolutionError: VirtualDisplayBackendError?
   var resolutionErrors: [String: VirtualDisplayBackendError] = [:]
+  var refreshRateErrors: [DisplayRefreshRate: VirtualDisplayBackendError] = [:]
   var beforeConnect: (@MainActor (VirtualDisplayProfile) async -> Void)?
   var beforeResolution: (@MainActor () async -> Void)?
 
@@ -144,6 +145,8 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   private(set) var connectRequests: [(VirtualDisplayProfile, ResolutionPreset)] = []
   private(set) var resolutionRequests: [(String, CGDirectDisplayID)] = []
   private(set) var appliedResolutionIDs: [CGDirectDisplayID: String] = [:]
+  private(set) var appliedRefreshRates: [CGDirectDisplayID: DisplayRefreshRate] = [:]
+  private(set) var refreshRateRequests: [(DisplayRefreshRate, CGDirectDisplayID)] = []
   private(set) var connections: [UUID: FakeDisplayConnection] = [:]
   private var terminationHandlers: [UUID: () -> Void] = [:]
   private var nextDisplayID: CGDirectDisplayID = 100
@@ -162,6 +165,7 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
     createdConnections.append(connection)
     connections[profile.id] = connection
     appliedResolutionIDs[connection.displayID] = resolution.id
+    appliedRefreshRates[connection.displayID] = profile.refreshRate
     terminationHandlers[profile.id] = terminationHandler
     return connection
   }
@@ -169,13 +173,20 @@ final class FakeVirtualDisplayBackend: VirtualDisplayBackend {
   @MainActor
   func setResolution(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate = .standard,
     for connection: any VirtualDisplayConnection
   ) async throws {
     await beforeResolution?()
-    if let error = resolutionErrors[resolution.id] ?? setResolutionError { throw error }
+    if let error = resolutionErrors[resolution.id] ?? refreshRateErrors[refreshRate]
+      ?? setResolutionError
+    {
+      throw error
+    }
     guard connection.isValid else { throw VirtualDisplayBackendError.invalidated }
     resolutionRequests.append((resolution.id, connection.displayID))
+    refreshRateRequests.append((refreshRate, connection.displayID))
     appliedResolutionIDs[connection.displayID] = resolution.id
+    appliedRefreshRates[connection.displayID] = refreshRate
   }
 
   func terminate(profileID: UUID) {

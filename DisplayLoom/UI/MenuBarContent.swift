@@ -90,6 +90,7 @@ struct MenuBarContent: View {
 
         mirrorMenu(for: profile, state: state)
         resolutionMenu(for: profile, state: state)
+        refreshRateMenu(for: profile, state: state)
 
         Divider()
 
@@ -216,6 +217,46 @@ struct MenuBarContent: View {
             String(
               format: String(localized: "menu.resolutionCurrent", defaultValue: "Resolution: %@"),
               profile.resolution?.displayName ?? profile.resolutionID
+            )
+          )
+        }
+      }
+    )
+    .disabled(state.isBusy || store.isMirroring(profileID: profile.id))
+  }
+
+  private func refreshRateMenu(
+    for profile: VirtualDisplayProfile,
+    state: DisplayConnectionState
+  ) -> some View {
+    Menu(
+      content: {
+        ForEach(DisplayRefreshRate.allCases) { rate in
+          Button(
+            action: {
+              Task { await actions.selectRefreshRate(rate, for: profile.id) }
+            },
+            label: {
+              if profile.refreshRate == rate {
+                Label(rate.localizedName, systemImage: "checkmark")
+              } else {
+                Text(rate.localizedName)
+              }
+            }
+          )
+        }
+      },
+      label: {
+        if store.isMirroring(profileID: profile.id) {
+          Text("menu.refreshRateControlledByMirror")
+        } else {
+          Text(
+            String(
+              format: String(
+                localized: "menu.refreshRateCurrent",
+                defaultValue: "Refresh Rate: %@"
+              ),
+              profile.refreshRate.localizedName
             )
           )
         }

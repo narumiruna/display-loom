@@ -29,6 +29,7 @@ protocol VirtualDisplayBackend: AnyObject {
 
   func setResolution(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate,
     for connection: any VirtualDisplayConnection
   ) async throws
 }
@@ -78,12 +79,12 @@ enum VirtualDisplayBackendError: LocalizedError, Equatable {
     case .modeUnavailable:
       return String(
         localized: "error.modeUnavailable",
-        defaultValue: "The selected resolution is not available on this Mac."
+        defaultValue: "The selected resolution and refresh rate are not available on this Mac."
       )
     case .modeSwitchFailed:
       return String(
         localized: "error.modeSwitchFailed",
-        defaultValue: "macOS could not switch to the selected resolution."
+        defaultValue: "macOS could not switch to the selected resolution and refresh rate."
       )
     case .invalidated:
       return String(

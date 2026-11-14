@@ -344,7 +344,6 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
 
     NSArray *availableModes = CFBridgingRelease(copiedModes);
     CGDisplayModeRef selectedMode = NULL;
-    CGDisplayModeRef zeroRefreshFallback = NULL;
     for (id candidateObject in availableModes) {
         CGDisplayModeRef candidate = (__bridge CGDisplayModeRef)candidateObject;
         if (CGDisplayModeGetPixelWidth(candidate) != width ||
@@ -357,14 +356,10 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
             selectedMode = candidate;
             break;
         }
-        if (candidateRefreshRate == 0.0) {
-            zeroRefreshFallback = candidate;
-        }
     }
 
-    if (selectedMode == NULL) {
-        selectedMode = zeroRefreshFallback;
-    }
+    // A zero reported rate cannot identify the requested rate when the same
+    // resolution has multiple refresh rates. Do not silently choose a fallback.
     if (selectedMode == NULL) {
         if (error != NULL) {
             NSString *description = [NSString stringWithFormat:@"The %u × %u at %.0f Hz mode is unavailable.",
@@ -379,7 +374,7 @@ static void VSCGSendPoint(id target, SEL selector, CGPoint value) {
     if (CGDisplayIsInMirrorSet(displayID)) {
         if (error != NULL) {
             *error = VSCGMakeError(VSCGVirtualDisplayErrorInvalidConfiguration,
-                                   @"The display resolution cannot change while mirroring.");
+                                   @"The display mode cannot change while mirroring.");
         }
         return NO;
     }
