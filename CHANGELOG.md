@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- Add a management window and Dock access while keeping menu bar controls.
+  
+  Keep all pending errors from overlapping display actions. Show automatic error and login approval notices only when the app is active.
+  
+  Restore the saved resolution selection after a cancelled or rejected change.
+
+- Add per-display 60 Hz (default) and 30 Hz (low refresh rate) choices to the management window and menu bar. Save the choice across reconnects and app relaunches. Older saved displays keep 60 Hz.
+  
+  Keep refresh-rate controls unavailable while mirroring. Select an exact reported refresh rate instead of silently using a mode with an unknown rate.
+
+### Patch Changes
+
+- Fix connection failures when macOS places a virtual display in a mirror set during connection. Keep mirroring active and let macOS select its compatible resolution.
+
 ## 0.1.3
 
 ### Patch Changes
