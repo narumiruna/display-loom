@@ -68,6 +68,7 @@ private final class CoreGraphicsVirtualDisplayConnection: VirtualDisplayConnecti
   /// The mirror read and mode write run in the same worker operation.
   func setResolution(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate,
     isInMirrorSet: (CGDirectDisplayID) -> Bool
   ) throws {
     guard isValid else { throw VirtualDisplayBackendError.invalidated }
@@ -77,7 +78,7 @@ private final class CoreGraphicsVirtualDisplayConnection: VirtualDisplayConnecti
     try handle.setMode(
       width: UInt32(resolution.width),
       height: UInt32(resolution.height),
-      refreshRate: 60
+      refreshRate: Double(refreshRate.rawValue)
     )
   }
 
@@ -178,6 +179,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
           guard try pending.connection.checkRegistration() else { return false }
           try Self.setInitialResolution(
             resolution,
+            refreshRate: profile.refreshRate,
             for: pending.connection,
             isInMirrorSet: isInMirrorSet
           )
@@ -213,6 +215,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
 
   func setResolution(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate = .standard,
     for connection: any VirtualDisplayConnection
   ) async throws {
     guard let connection = connection as? CoreGraphicsVirtualDisplayConnection else {
@@ -221,8 +224,17 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
 
     do {
       try await worker.perform { [isInMirrorSet, logger] in
-        try connection.setResolution(resolution, isInMirrorSet: isInMirrorSet)
-        logger.info("Set display \(connection.displayID) to \(resolution.id, privacy: .public)")
+        try connection.setResolution(
+          resolution,
+          refreshRate: refreshRate,
+          isInMirrorSet: isInMirrorSet
+        )
+        logger.info(
+          """
+          Set display \(connection.displayID) to \(resolution.id, privacy: .public) \
+          at \(refreshRate.rawValue) Hz
+          """
+        )
       }
     } catch is CancellationError {
       throw CancellationError()
@@ -237,6 +249,7 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
 
   private static func setInitialResolution(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate,
     for connection: CoreGraphicsVirtualDisplayConnection,
     isInMirrorSet: (CGDirectDisplayID) -> Bool
   ) throws {
@@ -244,7 +257,11 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     // connection and let macOS choose the mirror set's compatible mode.
     guard !isInMirrorSet(connection.displayID) else { return }
     do {
-      try connection.setResolution(resolution, isInMirrorSet: isInMirrorSet)
+      try connection.setResolution(
+        resolution,
+        refreshRate: refreshRate,
+        isInMirrorSet: isInMirrorSet
+      )
     } catch {
       // Mirroring can start before the bridge's final pre-write check.
       guard mapError(error) == .invalidConfiguration,
@@ -259,14 +276,6 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
     terminationHandler: @escaping () -> Void
   ) throws -> any CoreGraphicsVirtualDisplayHandling {
     let identity = StableDisplayIdentity(profileID: profile.id)
-    let orderedPresets = [resolution] + ResolutionPreset.catalog.filter { $0.id != resolution.id }
-    let modeSpecs = orderedPresets.map {
-      VSCGVirtualDisplayModeSpec(
-        width: UInt32($0.width),
-        height: UInt32($0.height),
-        refreshRate: 60
-      )
-    }
     return try VSCGVirtualDisplayHandle.create(
       withName: profile.name,
       vendorID: identity.vendorID,
@@ -274,8 +283,25 @@ final class CoreGraphicsVirtualDisplayBackend: VirtualDisplayBackend {
       serialNumber: identity.serialNumber,
       maxWidth: UInt32(ResolutionPreset.maximumWidth),
       maxHeight: UInt32(ResolutionPreset.maximumHeight),
-      modes: modeSpecs,
+      modes: modeSpecs(resolution: resolution, refreshRate: profile.refreshRate),
       terminationHandler: terminationHandler
     )
+  }
+
+  static func modeSpecs(
+    resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate
+  ) -> [VSCGVirtualDisplayModeSpec] {
+    let orderedPresets = [resolution] + ResolutionPreset.catalog.filter { $0.id != resolution.id }
+    let orderedRates = [refreshRate] + DisplayRefreshRate.allCases.filter { $0 != refreshRate }
+    return orderedPresets.flatMap { preset in
+      orderedRates.map { rate in
+        VSCGVirtualDisplayModeSpec(
+          width: UInt32(preset.width),
+          height: UInt32(preset.height),
+          refreshRate: Double(rate.rawValue)
+        )
+      }
+    }
   }
 }

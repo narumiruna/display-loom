@@ -79,8 +79,8 @@ final class VirtualDisplayStore: ObservableObject {
   private var connectionCleanups: [UUID: (token: UUID, task: Task<Void, Never>)] = [:]
   private var recoveryGenerations: [UUID: UUID] = [:]
   private var failedRestores: [UUID: RestoreSnapshot] = [:]
-  private var resolutionTokens: [UUID: UUID] = [:]
-  private var resolutionTasks: [UUID: Task<Void, Never>] = [:]
+  private var modeTokens: [UUID: UUID] = [:]
+  private var modeTasks: [UUID: Task<Void, Never>] = [:]
   private var onlineDisplays: [CGDirectDisplayID: UUID] = [:]
   private var screenUpdateTask: Task<Void, Never>?
   private var screenUpdatePending = false
@@ -121,7 +121,7 @@ final class VirtualDisplayStore: ObservableObject {
   deinit {
     screenUpdateTask?.cancel()
     for operation in mirrorOperations.values { operation.task.cancel() }
-    for operation in resolutionTasks.values { operation.cancel() }
+    for operation in modeTasks.values { operation.cancel() }
     let creations = Array(pendingConnections.values)
     for creation in creations { creation.cancel() }
     let manager = mirroringManager
@@ -268,8 +268,23 @@ final class VirtualDisplayStore: ObservableObject {
   }
 
   func setResolution(_ resolution: ResolutionPreset, for profileID: UUID) async {
+    await setMode(resolution: resolution, for: profileID)
+  }
+
+  func setRefreshRate(_ refreshRate: DisplayRefreshRate, for profileID: UUID) async {
+    await setMode(refreshRate: refreshRate, for: profileID)
+  }
+
+  private func setMode(
+    resolution: ResolutionPreset? = nil,
+    refreshRate: DisplayRefreshRate? = nil,
+    for profileID: UUID
+  ) async {
     guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
-    guard profiles[index].resolutionID != resolution.id || resolutionTasks[profileID] != nil
+    guard
+      resolution.map({ $0.id != profiles[index].resolutionID }) == true
+        || refreshRate.map({ $0 != profiles[index].refreshRate }) == true
+        || modeTasks[profileID] != nil
     else { return }
 
     if mirrorOperations[profileID] != nil
@@ -278,39 +293,53 @@ final class VirtualDisplayStore: ObservableObject {
       }) == true
     {
       refreshActiveMirrorStates()
-      reportError(
-        String(
+      let message =
+        resolution != nil
+        ? String(
           localized: "error.resolutionMirrored",
           defaultValue: "Disconnect display mirroring before changing the resolution."
         )
-      )
+        : String(
+          localized: "error.refreshRateMirrored",
+          defaultValue: "Disconnect display mirroring before changing the refresh rate."
+        )
+      reportError(message)
       return
     }
 
     if let connection = connections[profileID], let token = connectionTokens[profileID] {
       let requestToken = UUID()
-      let previous = resolutionTasks[profileID]
+      let previous = modeTasks[profileID]
       let backend = backend
-      resolutionTokens[profileID] = requestToken
+      modeTokens[profileID] = requestToken
       let operation = Task { @MainActor [weak self] () in
-        defer { self?.finishResolutionRequest(for: profileID, token: requestToken) }
+        defer { self?.finishModeRequest(for: profileID, token: requestToken) }
         await previous?.value
         guard !Task.isCancelled, self?.connectionTokens[profileID] == token,
-          self?.resolutionTokens[profileID] == requestToken
+          let profile = self?.profile(id: profileID),
+          let selectedResolution = resolution ?? profile.resolution
         else { return }
+        // Resolve the unchanged setting after the previous write. A queued
+        // refresh-rate change must not restore an older resolution, or vice versa.
+        let selectedRate = refreshRate ?? profile.refreshRate
         do {
-          try await backend.setResolution(resolution, for: connection)
-          // Commit this actual mode before the next write. A later failed write
-          // must not leave persistence pointing at a mode older than this one.
-          self?.applyResolution(resolution, for: profileID, connectionToken: token)
+          try await backend.setResolution(
+            selectedResolution,
+            refreshRate: selectedRate,
+            for: connection
+          )
+          self?.applyMode(
+            selectedResolution,
+            refreshRate: selectedRate,
+            for: profileID,
+            connectionToken: token
+          )
         } catch {
-          guard self?.connectionTokens[profileID] == token,
-            self?.resolutionTokens[profileID] == requestToken
-          else { return }
+          guard self?.connectionTokens[profileID] == token else { return }
           self?.reportError(error.localizedDescription)
         }
       }
-      resolutionTasks[profileID] = operation
+      modeTasks[profileID] = operation
       await withTaskCancellationHandler(
         operation: {
           await operation.value
@@ -322,7 +351,8 @@ final class VirtualDisplayStore: ObservableObject {
       return
     }
 
-    profiles[index].resolutionID = resolution.id
+    if let resolution { profiles[index].resolutionID = resolution.id }
+    if let refreshRate { profiles[index].refreshRate = refreshRate }
     save()
 
     if case .connecting = state(for: profileID), profiles[index].desiredConnected {
@@ -330,14 +360,15 @@ final class VirtualDisplayStore: ObservableObject {
     }
   }
 
-  private func finishResolutionRequest(for profileID: UUID, token: UUID) {
-    guard resolutionTokens[profileID] == token else { return }
-    resolutionTokens[profileID] = nil
-    resolutionTasks[profileID] = nil
+  private func finishModeRequest(for profileID: UUID, token: UUID) {
+    guard modeTokens[profileID] == token else { return }
+    modeTokens[profileID] = nil
+    modeTasks[profileID] = nil
   }
 
-  private func applyResolution(
+  private func applyMode(
     _ resolution: ResolutionPreset,
+    refreshRate: DisplayRefreshRate,
     for profileID: UUID,
     connectionToken: UUID
   ) {
@@ -346,6 +377,7 @@ final class VirtualDisplayStore: ObservableObject {
       let connection = connections[profileID]
     else { return }
     profiles[index].resolutionID = resolution.id
+    profiles[index].refreshRate = refreshRate
     connectionStates[profileID] = .connected(displayID: connection.displayID)
     save()
   }
@@ -456,8 +488,8 @@ final class VirtualDisplayStore: ObservableObject {
 
   private func detachConnection(for profileID: UUID) -> Task<Void, Never>? {
     connectionTokens[profileID] = nil
-    resolutionTokens[profileID] = nil
-    resolutionTasks.removeValue(forKey: profileID)?.cancel()
+    modeTokens[profileID] = nil
+    modeTasks.removeValue(forKey: profileID)?.cancel()
     failedRestores[profileID] = nil
     recoveryGenerations[profileID] = nil
     let operation = mirrorOperations.removeValue(forKey: profileID)

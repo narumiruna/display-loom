@@ -139,6 +139,10 @@ final class CoreGraphicsVirtualDisplayBackendTests: XCTestCase {
     try await BackendPerformanceChecks.unmirroredModeWritesReachHandle()
   }
 
+  func testRefreshRatesAreAdvertisedAndSelected() async throws {
+    try await BackendPerformanceChecks.refreshRatesAreAdvertisedAndSelected()
+  }
+
   func testModeWriteRechecksMirrorStateOnWorker() async throws {
     try await BackendPerformanceChecks.modeWriteRechecksMirrorStateOnWorker()
   }

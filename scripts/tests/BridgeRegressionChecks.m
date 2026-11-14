@@ -107,6 +107,8 @@ static __weak VSCGTestDisplay *allocatedDisplay;
 static __weak VSCGTestDisplay *returnedDisplay;
 static VSCGTestMirrorState mirrorState;
 static NSUInteger modeWrites;
+static NSArray<VSCGTestMode *> *availableModes;
+static double lastWrittenRefreshRate;
 static NSUInteger terminationCalls;
 static const CGDirectDisplayID testDisplayID = 424242;
 
@@ -213,7 +215,7 @@ static CFArrayRef VSCGTestCopyAllDisplayModes(CGDirectDisplayID displayID,
                                              __unused CFDictionaryRef options) {
     VSCGTestRequire(displayID == testDisplayID, @"Only fake modes may be queried");
     VSCGTestRequire(returnedMode != nil, @"The fake mode must remain owned");
-    return (__bridge_retained CFArrayRef)@[returnedMode];
+    return (__bridge_retained CFArrayRef)(availableModes ?: @[returnedMode]);
 }
 
 static size_t VSCGTestModeGetPixelWidth(CGDisplayModeRef mode) {
@@ -242,7 +244,10 @@ static CGError VSCGTestSetDisplayMode(CGDirectDisplayID displayID,
                                     CGDisplayModeRef mode,
                                     __unused CFDictionaryRef options) {
     VSCGTestRequire(displayID == testDisplayID, @"Only the fake display may be written");
-    VSCGTestRequire((__bridge id)mode == returnedMode, @"The selected mode must match");
+    VSCGTestRequire(availableModes ? [availableModes containsObject:(__bridge id)mode]
+                                   : (__bridge id)mode == returnedMode,
+                    @"The selected mode must match an available mode");
+    lastWrittenRefreshRate = VSCGTestModeGetRefreshRate(mode);
     modeWrites += 1;
     return kCGErrorSuccess;
 }
@@ -259,6 +264,8 @@ static void VSCGTestReset(VSCGTestInitResult modeResult, VSCGTestInitResult disp
     displayDeallocations = 0;
     mirrorState = VSCGTestUnmirrored;
     modeWrites = 0;
+    availableModes = nil;
+    lastWrittenRefreshRate = 0;
     terminationCalls = 0;
 }
 
@@ -356,6 +363,41 @@ static void VSCGTestMirrorGuard(VSCGTestMirrorState state) {
                     @"Mirror checks must release every fake object");
 }
 
+static void VSCGTestRefreshRateSelection(void) {
+    VSCGTestReset(VSCGTestInitSelf, VSCGTestInitSelf);
+    @autoreleasepool {
+        NSError *error = nil;
+        VSCGVirtualDisplayHandle *handle = VSCGTestCreateHandle(&error);
+        VSCGTestRequire(handle != nil && error == nil, @"Fake creation must succeed");
+        VSCGTestMode *standard = returnedMode;
+        VSCGTestMode *low = [[VSCGTestMode alloc] initWithWidth:1920 height:1080 refreshRate:30];
+        // Place 60 Hz first so a resolution-only match would select the wrong rate.
+        availableModes = @[standard, low];
+        for (NSNumber *rate in @[@30, @60, @30]) {
+            BOOL changed = [handle setModeWithWidth:1920 height:1080
+                                       refreshRate:rate.doubleValue error:&error];
+            VSCGTestRequire(changed && error == nil && lastWrittenRefreshRate == rate.doubleValue,
+                            @"Mode selection must match both resolution and refresh rate");
+        }
+        NSUInteger successfulWrites = modeWrites;
+        standard.refreshRate = 0;
+        low.refreshRate = 0;
+        for (NSNumber *rate in @[@30, @60]) {
+            error = nil;
+            BOOL changed = [handle setModeWithWidth:1920 height:1080
+                                       refreshRate:rate.doubleValue error:&error];
+            VSCGTestRequire(!changed && error.code == VSCGVirtualDisplayErrorModeUnavailable &&
+                                modeWrites == successfulWrites,
+                            @"An unknown reported rate must not silently select a different mode");
+        }
+        availableModes = nil;
+        [handle invalidate];
+    }
+    VSCGTestRequire(modeAllocations == modeDeallocations &&
+                        displayAllocations == displayDeallocations,
+                    @"Refresh-rate checks must release every fake object");
+}
+
 int main(void) {
     for (VSCGTestInitResult modeResult = VSCGTestInitSelf;
          modeResult <= VSCGTestInitReplacement; modeResult += 1) {
@@ -367,6 +409,7 @@ int main(void) {
     VSCGTestMirrorGuard(VSCGTestUnmirrored);
     VSCGTestMirrorGuard(VSCGTestMirrorSecondary);
     VSCGTestMirrorGuard(VSCGTestMirrorPrimary);
-    puts("PASS bridge: 9 initializer ownership cases and 3 mirror mode guards (fake displays only)");
+    VSCGTestRefreshRateSelection();
+    puts("PASS bridge: initializer ownership, mirror guards, and exact refresh rates (fake displays only)");
     return EXIT_SUCCESS;
 }

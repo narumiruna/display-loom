@@ -1,6 +1,9 @@
 "aspectRatio.16by9" = "16:9";
 "aspectRatio.16by10" = "16:10";
 
+"refreshRate.standard" = "60 Hz（預設）";
+"refreshRate.low" = "30 Hz（低更新率）";
+
 "display.defaultName" = "虛擬螢幕";
 "display.builtInName" = "內建顯示器";
 "display.externalName" = "外接顯示器";
@@ -10,6 +13,7 @@
 "window.description" = "管理虛擬螢幕與同步顯示設定。";
 "window.emptyDescription" = "使用工具列的 + 按鈕新增虛擬螢幕。";
 "window.resolution" = "解析度";
+"window.refreshRate" = "更新率";
 "window.resolutionControlledByMirror" = "由同步來源控制";
 
 "menu.openWindow" = "開啟 Display Loom";
@@ -20,6 +24,8 @@
 "menu.disconnect" = "中斷連線";
 "menu.resolutionCurrent" = "解析度：%@";
 "menu.resolutionControlledByMirror" = "解析度：由同步來源控制";
+"menu.refreshRateCurrent" = "更新率：%@";
+"menu.refreshRateControlledByMirror" = "更新率：由同步來源控制";
 "menu.mirrorDisplay" = "同步顯示";
 "menu.mirrorNone" = "不同步";
 "menu.mirrorRestoreFailed" = "所選同步來源尚未生效";
@@ -58,9 +64,10 @@
 "error.creationFailed" = "macOS 無法建立虛擬顯示器，可能已達系統顯示器數量上限。";
 "error.settingsRejected" = "macOS 拒絕了要求的虛擬顯示器設定。";
 "error.registrationTimedOut" = "虛擬顯示器未在兩秒內出現。";
-"error.modeUnavailable" = "這台 Mac 不提供所選解析度。";
-"error.modeSwitchFailed" = "macOS 無法切換至所選解析度。";
+"error.modeUnavailable" = "這台 Mac 不提供所選解析度與更新率。";
+"error.modeSwitchFailed" = "macOS 無法切換至所選解析度與更新率。";
 "error.resolutionMirrored" = "請先停止同步顯示，再變更解析度。";
+"error.refreshRateMirrored" = "請先停止同步顯示，再變更更新率。";
 "error.displayList" = "無法列出顯示器（CoreGraphics 錯誤 %d）。";
 "error.mirrorTargetUnavailable" = "虛擬螢幕已無法使用。";
 "error.mirrorSourceUnavailable" = "所選來源顯示器目前無法使用。";
